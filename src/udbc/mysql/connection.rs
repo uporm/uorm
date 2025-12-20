@@ -6,8 +6,8 @@ use tokio::sync::Mutex;
 
 use crate::error::DbError;
 use crate::udbc::connection::Connection;
+use crate::udbc::mysql::value_codec::{from_mysql_value, to_mysql_value};
 use crate::udbc::value::Value;
-use crate::udbc_mysql::value_codec::{from_mysql_value, to_mysql_value};
 
 pub struct MysqlConnection {
     conn: Mutex<Conn>,

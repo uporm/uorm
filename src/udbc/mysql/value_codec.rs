@@ -16,15 +16,14 @@ pub fn from_mysql_value(v: &MyValue) -> Value {
             } else {
                 let dt = NaiveDate::from_ymd_opt(*y as i32, *m as u32, *d as u32)
                     .unwrap()
-                    .and_hms_micro_opt(*h as u32, *min as u32, *s as u32, *micro as u32)
+                    .and_hms_micro_opt(*h as u32, *min as u32, *s as u32, *micro)
                     .unwrap();
                 Value::DateTime(dt)
             }
         }
         MyValue::Time(is_neg, days, h, min, s, micro) => {
             let total_h = *days * 24 + (*h as u32);
-            let t = NaiveTime::from_hms_micro_opt(total_h, *min as u32, *s as u32, *micro as u32)
-                .unwrap();
+            let t = NaiveTime::from_hms_micro_opt(total_h, *min as u32, *s as u32, *micro).unwrap();
             if *is_neg {
                 Value::Str(format!("-{}", t))
             } else {

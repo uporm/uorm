@@ -85,18 +85,10 @@ fn eval_atom(expr: &str, ctx: &Context) -> bool {
                 left != right
             }
         }
-        ">" => to_f64(left)
-            .zip(to_f64(right))
-            .map_or(false, |(l, r)| l > r),
-        ">=" => to_f64(left)
-            .zip(to_f64(right))
-            .map_or(false, |(l, r)| l >= r),
-        "<" => to_f64(left)
-            .zip(to_f64(right))
-            .map_or(false, |(l, r)| l < r),
-        "<=" => to_f64(left)
-            .zip(to_f64(right))
-            .map_or(false, |(l, r)| l <= r),
+        ">" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l > r),
+        ">=" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l >= r),
+        "<" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l < r),
+        "<=" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l <= r),
         _ => false,
     }
 }
@@ -138,11 +130,11 @@ pub(crate) fn render(nodes: &[AstNode], ctx: &mut Context, buf: &mut RenderBuffe
                     render(body, ctx, buf);
                 }
             }
-            AstNode::For {
+            AstNode::Foreach {
                 item,
                 collection,
                 open,
-                sep,
+                separator,
                 close,
                 body,
             } => {
@@ -157,7 +149,7 @@ pub(crate) fn render(nodes: &[AstNode], ctx: &mut Context, buf: &mut RenderBuffe
                 buf.sql.push_str(open);
                 for (i, v) in arr.iter().enumerate() {
                     if i > 0 {
-                        buf.sql.push_str(sep);
+                        buf.sql.push_str(separator);
                     }
 
                     ctx.push(item, v);
@@ -180,7 +172,7 @@ mod tests {
         let root = Value::Map(HashMap::new());
         let ctx = Context::new(&root);
 
-        assert_eq!(eval_atom("var", &ctx), false);
+        assert!(!eval_atom("var", &ctx));
 
         let mut map = HashMap::new();
         map.insert("a".to_string(), Value::I64(10));

@@ -35,3 +35,10 @@ impl From<mysql_async::Error> for DbError {
         DbError::Database(e.to_string())
     }
 }
+
+#[cfg(feature = "sqlite")]
+impl From<rusqlite::Error> for DbError {
+    fn from(e: rusqlite::Error) -> Self {
+        DbError::Database(e.to_string())
+    }
+}

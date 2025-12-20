@@ -16,6 +16,12 @@ pub struct DriverManager {
     pools: DashMap<String, Arc<dyn Driver>>,
 }
 
+impl Default for DriverManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DriverManager {
     pub fn new() -> Self {
         Self {

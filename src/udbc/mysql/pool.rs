@@ -1,8 +1,8 @@
 use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
+use crate::udbc::mysql::connection::MysqlConnection;
 use crate::udbc::{ConnectionOptions, DEFAULT_DB_NAME};
-use crate::udbc_mysql::connection::MysqlConnection;
 use async_trait::async_trait;
 use mysql_async::Pool as MySqlPoolInternal;
 use mysql_async::{Opts, OptsBuilder, PoolConstraints, PoolOpts};

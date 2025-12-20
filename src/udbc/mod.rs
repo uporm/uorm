@@ -3,9 +3,13 @@ pub mod value;
 pub mod connection;
 pub mod deserializer;
 pub mod driver;
+#[cfg(feature = "mysql")]
+pub mod mysql;
 pub mod serializer;
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
 
-pub const DEFAULT_DB_NAME: &'static str = "default";
+pub const DEFAULT_DB_NAME: &str = "default";
 
 pub struct ConnectionOptions {
     pub max_open_conns: u64, // 设置池最大连接数

@@ -15,11 +15,11 @@ pub enum AstNode {
         test: String,
         body: Vec<AstNode>,
     },
-    For {
+    Foreach {
         item: String,
         collection: String,
         open: String,
-        sep: String,
+        separator: String,
         close: String,
         body: Vec<AstNode>,
     },

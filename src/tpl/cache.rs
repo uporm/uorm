@@ -20,10 +20,10 @@ pub(crate) fn get_ast(template_name: &str, template_content: &str) -> Arc<Vec<As
     template_content.hash(&mut hasher);
     let new_hash = hasher.finish();
 
-    if let Some(cached) = TEMPLATE_CACHE.get(template_name) {
-        if cached.content_hash == new_hash {
-            return cached.ast.clone();
-        }
+    if let Some(cached) = TEMPLATE_CACHE.get(template_name)
+        && cached.content_hash == new_hash
+    {
+        return cached.ast.clone();
     }
 
     let ast = Arc::new(parse_template(template_content));

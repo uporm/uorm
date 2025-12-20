@@ -32,10 +32,9 @@ pub fn render_template<T: serde::Serialize>(
     (buf.sql, buf.params)
 }
 
-/// 卸载模板缓存
-pub fn remove_template(template_name: &str) {
-    cache::TEMPLATE_CACHE.remove(template_name);
-}
+// pub fn remove_template(template_name: &str) {
+//     cache::TEMPLATE_CACHE.remove(template_name);
+// }
 
 #[cfg(test)]
 mod tests {
@@ -143,15 +142,15 @@ mod tests {
     }
 
     #[derive(Serialize)]
-    struct ForArgs {
+    struct ForeachArgs {
         ids: Vec<i32>,
     }
 
     #[test]
-    fn test_for_tag() {
-        let tpl = "select * from user where id in <for item=\"id\" collection=\"ids\" open= \"(\" sep=\",\" close=\")\">#{id}</for>";
+    fn test_foreach_tag() {
+        let tpl = "select * from user where id in <foreach item=\"id\" collection=\"ids\" open= \"(\" separator=\",\" close=\")\">#{id}</foreach>";
 
-        let args = ForArgs { ids: vec![1, 2, 3] };
+        let args = ForeachArgs { ids: vec![1, 2, 3] };
 
         let (sql, params) = render_template("test_for", tpl, &args, &MockDriver);
         assert_eq!(sql, "select * from user where id in (?,?,?)");
@@ -168,7 +167,7 @@ mod tests {
         }
 
         // Empty list
-        let args = ForArgs { ids: vec![] };
+        let args = ForeachArgs { ids: vec![] };
         let (sql, params) = render_template("test_for_empty", tpl, &args, &MockDriver);
         assert_eq!(sql, "select * from user where id in "); // Note: usually empty IN clause is invalid SQL, but engine renders what's asked
         assert_eq!(params.len(), 0);
@@ -188,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_nested_loop() {
-        let tpl = "insert into user_roles (user, role) values <for item=\"r\" collection=\"roles\" sep=\",\">(#{name}, #{r.id})</for>";
+        let tpl = "insert into user_roles (user, role) values <foreach item=\"r\" collection=\"roles\" separator=\",\">(#{name}, #{r.id})</foreach>";
 
         let user = NestedUser {
             name: "alice".to_string(),

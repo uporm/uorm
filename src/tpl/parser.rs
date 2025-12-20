@@ -1,15 +1,15 @@
 use crate::tpl::AstNode;
 
-/// 用于跟踪嵌套标签（如 <if> 和 <for>）的栈帧。
+/// 用于跟踪嵌套标签（如 <if> 和 <foreach>）的栈帧。
 enum TagFrame {
     If {
         test: String,
     },
-    For {
+    Foreach {
         item: String,
         collection: String,
         open: String,
-        sep: String,
+        separator: String,
         close: String,
     },
 }
@@ -49,7 +49,7 @@ impl<'a> Parser<'a> {
         self.nodes_stack.pop().unwrap_or_default()
     }
 
-    /// 尝试解析标签：<if>, </if>, <for>, </for>, <include>。
+    /// 尝试解析标签：<if>, </if>, <foreach>, </foreach>, <include>。
     /// 如果成功解析并消耗了一个标签，则返回 true。
     fn try_parse_tag(&mut self) -> bool {
         let remaining = &self.template[self.pos..];
@@ -60,8 +60,8 @@ impl<'a> Parser<'a> {
         if remaining.starts_with("<if ") {
             return self.handle_if_tag(remaining);
         }
-        if remaining.starts_with("<for ") {
-            return self.handle_for_tag(remaining);
+        if remaining.starts_with("<foreach ") {
+            return self.handle_foreach_tag(remaining);
         }
         if remaining.starts_with("<include") {
             return self.handle_include_tag(remaining);
@@ -86,24 +86,24 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 处理 <for item="..." collection="...">
-    fn handle_for_tag(&mut self, remaining: &str) -> bool {
+    /// 处理 <foreach item="..." collection="...">
+    fn handle_foreach_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[5..end_idx]; // 跳过 "<for "
+            let tag_content = &remaining[9..end_idx]; // 跳过 "<foreach "
             if let (Some(item), Some(collection)) = (
                 extract_attr(tag_content, "item"),
                 extract_attr(tag_content, "collection"),
             ) {
                 let open = extract_attr(tag_content, "open").unwrap_or("");
-                let sep = extract_attr(tag_content, "sep").unwrap_or(",");
+                let separator = extract_attr(tag_content, "separator").unwrap_or(",");
                 let close = extract_attr(tag_content, "close").unwrap_or("");
 
                 self.nodes_stack.push(Vec::new());
-                self.tag_stack.push(TagFrame::For {
+                self.tag_stack.push(TagFrame::Foreach {
                     item: item.to_string(),
                     collection: collection.to_string(),
                     open: open.to_string(),
-                    sep: sep.to_string(),
+                    separator: separator.to_string(),
                     close: close.to_string(),
                 });
                 self.pos += end_idx + 1;
@@ -128,40 +128,37 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 处理闭合标签 </if> 和 </for>
+    /// 处理闭合标签 </if> 和 </foreach>
     fn handle_close_tag(&mut self, remaining: &str) -> bool {
-        if remaining.starts_with("</if>") {
-            if let Some(TagFrame::If { .. }) = self.tag_stack.last() {
-                if let Some(TagFrame::If { test }) = self.tag_stack.pop() {
-                    let body = self.nodes_stack.pop().unwrap_or_default();
-                    self.append_node(AstNode::If { test, body });
-                    self.pos += 5;
-                    return true;
-                }
-            }
-        } else if remaining.starts_with("</for>") {
-            if let Some(TagFrame::For { .. }) = self.tag_stack.last() {
-                if let Some(TagFrame::For {
-                    item,
-                    collection,
-                    open,
-                    sep,
-                    close,
-                }) = self.tag_stack.pop()
-                {
-                    let body = self.nodes_stack.pop().unwrap_or_default();
-                    self.append_node(AstNode::For {
-                        item,
-                        collection,
-                        open,
-                        sep,
-                        close,
-                        body,
-                    });
-                    self.pos += 6;
-                    return true;
-                }
-            }
+        if remaining.starts_with("</if>")
+            && let Some(TagFrame::If { .. }) = self.tag_stack.last()
+            && let Some(TagFrame::If { test }) = self.tag_stack.pop()
+        {
+            let body = self.nodes_stack.pop().unwrap_or_default();
+            self.append_node(AstNode::If { test, body });
+            self.pos += 5;
+            return true;
+        } else if remaining.starts_with("</foreach>")
+            && let Some(TagFrame::Foreach { .. }) = self.tag_stack.last()
+            && let Some(TagFrame::Foreach {
+                item,
+                collection,
+                open,
+                separator,
+                close,
+            }) = self.tag_stack.pop()
+        {
+            let body = self.nodes_stack.pop().unwrap_or_default();
+            self.append_node(AstNode::Foreach {
+                item,
+                collection,
+                open,
+                separator,
+                close,
+                body,
+            });
+            self.pos += 10;
+            return true;
         }
         false
     }
@@ -169,14 +166,14 @@ impl<'a> Parser<'a> {
     /// 尝试解析变量表达式 #{var}
     fn try_parse_var(&mut self) -> bool {
         let remaining = &self.template[self.pos..];
-        if remaining.starts_with("#{") {
-            if let Some(end) = remaining.find('}') {
-                let var_name = remaining[2..end].trim();
-                if !var_name.is_empty() {
-                    self.append_node(AstNode::Var(var_name.to_string()));
-                    self.pos += end + 1;
-                    return true;
-                }
+        if remaining.starts_with("#{")
+            && let Some(end) = remaining.find('}')
+        {
+            let var_name = remaining[2..end].trim();
+            if !var_name.is_empty() {
+                self.append_node(AstNode::Var(var_name.to_string()));
+                self.pos += end + 1;
+                return true;
             }
         }
         false
@@ -224,17 +221,17 @@ impl<'a> Parser<'a> {
             let body = self.nodes_stack.pop().unwrap_or_default();
             let node = match tag {
                 TagFrame::If { test } => AstNode::If { test, body },
-                TagFrame::For {
+                TagFrame::Foreach {
                     item,
                     collection,
                     open,
-                    sep,
+                    separator,
                     close,
-                } => AstNode::For {
+                } => AstNode::Foreach {
                     item,
                     collection,
                     open,
-                    sep,
+                    separator,
                     close,
                     body,
                 },
@@ -279,13 +276,13 @@ fn extract_attr<'a>(tag_content: &'a str, key: &str) -> Option<&'a str> {
         let trimmed = remaining.trim_start();
 
         // 期望 '=' 后跟带引号的字符串
-        if trimmed.starts_with('=') {
-            let after_eq = trimmed[1..].trim_start();
-            if after_eq.starts_with('"') {
-                if let Some(end) = after_eq[1..].find('"') {
-                    // +1 跳过起始引号
-                    return Some(&after_eq[1..1 + end]);
-                }
+        if let Some(stripped) = trimmed.strip_prefix('=') {
+            let after_eq = stripped.trim_start();
+            if after_eq.starts_with('"')
+                && let Some(end) = after_eq[1..].find('"')
+            {
+                // +1 跳过起始引号
+                return Some(&after_eq[1..1 + end]);
             }
         }
     }
@@ -357,18 +354,18 @@ mod tests {
 
     #[test]
     fn test_parse_nested() {
-        let tpl = r#"<if test="x"><for item="i" collection="list">#{i}</for></if>"#;
+        let tpl = r#"<if test="x"><foreach item="i" collection="list">#{i}</foreach></if>"#;
         let nodes = parse_template(tpl);
         assert_eq!(nodes.len(), 1);
         match &nodes[0] {
             AstNode::If { body, .. } => {
                 assert_eq!(body.len(), 1);
                 match &body[0] {
-                    AstNode::For { item, body, .. } => {
+                    AstNode::Foreach { item, body, .. } => {
                         assert_eq!(item, "i");
                         assert_eq!(body.len(), 1);
                     }
-                    _ => panic!("Expected For"),
+                    _ => panic!("Expected Foreach"),
                 }
             }
             _ => panic!("Expected If"),
