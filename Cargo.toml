@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2024"
 description = "Rust 下的轻量级 ORM 框架，借鉴了 Java MyBatis 的设计理念，强调 SQL 与业务逻辑分离。它结合 Rust 的类型系统与宏机制，支持编写原生 SQL 并自动映射结果，兼容 async/await，兼顾性能与可控性。"
 license = "Apache-2.0"
+repository = "https://github.com/uporm/uorm"
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }

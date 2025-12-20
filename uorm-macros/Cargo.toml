@@ -2,7 +2,9 @@
 name = "uorm-macros"
 version = "0.2.0"
 edition = "2024"
-
+description = "uorm 的过程宏集合：提供 mapper_assets! 编译期内嵌 XML mapper 资源，以及 sql_namespace/sql_* 属性宏，简化基于 SQL ID 的 Mapper 调用。"
+license = "Apache-2.0"
+repository = "https://github.com/uporm/uorm"
 [lib]
 proc-macro = true
 

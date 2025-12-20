@@ -37,16 +37,15 @@ impl Parse for SqlArgs {
         // Parse named arguments
         let metas: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(input)?;
         for meta in metas {
-            if let Meta::NameValue(nv) = meta {
-                if let Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(lit_str) = &expr_lit.lit
-                {
-                    if nv.path.is_ident("id") {
-                        id = Some(lit_str.value());
-                    } else if nv.path.is_ident("db_name") {
-                        db_name = lit_str.value();
-                    }
-                };
+            if let Meta::NameValue(nv) = meta
+                && let Expr::Lit(expr_lit) = &nv.value
+                && let Lit::Str(lit_str) = &expr_lit.lit
+            {
+                if nv.path.is_ident("id") {
+                    id = Some(lit_str.value());
+                } else if nv.path.is_ident("db_name") {
+                    db_name = lit_str.value();
+                }
             }
         }
 
