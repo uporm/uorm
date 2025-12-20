@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//uorm.org//DTD Mapper 1.0//EN" "uorm-1.0-mapper.dtd">
+<mapper namespace="test_ns">
+    <select id="selectUser">
+        SELECT * FROM users
+    </select>
+</mapper>

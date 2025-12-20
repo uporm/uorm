@@ -1,0 +1,59 @@
+<!ELEMENT mapper (select | insert | update | delete)*>
+        <!ATTLIST mapper
+                namespace CDATA #REQUIRED
+                >
+
+        <!-- ========================= -->
+        <!-- select -->
+        <!-- ========================= -->
+        <!ELEMENT select (#PCDATA | if | foreach)*>
+        <!ATTLIST select
+                id CDATA #REQUIRED
+                databaseId CDATA #IMPLIED
+                >
+
+        <!-- ========================= -->
+        <!-- insert -->
+        <!-- ========================= -->
+        <!ELEMENT insert (#PCDATA | foreach)*>
+        <!ATTLIST insert
+                id CDATA #REQUIRED
+                useGeneratedKeys (true | false) #IMPLIED
+                keyColumn CDATA #IMPLIED
+                >
+
+        <!-- ========================= -->
+        <!-- update -->
+        <!-- ========================= -->
+        <!ELEMENT update (#PCDATA | if)*>
+        <!ATTLIST update
+                id CDATA #REQUIRED
+                >
+
+        <!-- ========================= -->
+        <!-- delete -->
+        <!-- ========================= -->
+        <!ELEMENT delete (#PCDATA)>
+        <!ATTLIST delete
+                id CDATA #REQUIRED
+                >
+
+        <!-- ========================= -->
+        <!-- if -->
+        <!-- ========================= -->
+        <!ELEMENT if (#PCDATA | foreach)*>
+        <!ATTLIST if
+                test CDATA #REQUIRED
+                >
+
+        <!-- ========================= -->
+        <!-- foreach -->
+        <!-- ========================= -->
+        <!ELEMENT foreach (#PCDATA)>
+        <!ATTLIST foreach
+                collection CDATA #REQUIRED
+                item CDATA #REQUIRED
+                open CDATA #IMPLIED
+                separator CDATA #IMPLIED
+                close CDATA #IMPLIED
+                >
