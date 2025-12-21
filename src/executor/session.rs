@@ -46,7 +46,7 @@ impl Session {
             result
         } else {
             let (rendered_sql, params) =
-                engine::render_template(sql, sql, args, self.pool.as_ref());
+                engine::render_template(sql, sql, args, self.pool.as_ref())?;
             let conn = self.pool.connection().await?;
             let start = Instant::now();
             let result = conn.execute(&rendered_sql, &params).await;
@@ -66,7 +66,19 @@ impl Session {
         T: serde::Serialize,
         R: serde::de::DeserializeOwned,
     {
-        let rows = if let Ok(ctx) = TX_CONTEXT.try_with(|tx| tx.clone()) {
+        let rows = self.query_raw(sql, args).await?;
+        Self::map_rows(rows)
+    }
+
+    pub async fn query_raw<T>(
+        &self,
+        sql: &str,
+        args: &T,
+    ) -> Result<Vec<HashMap<String, Value>>, DbError>
+    where
+        T: serde::Serialize,
+    {
+        if let Ok(ctx) = TX_CONTEXT.try_with(|tx| tx.clone()) {
             let start = Instant::now();
             let rows = ctx.lock().await.query(sql, args).await?;
             let elapsed_ms = start.elapsed().as_millis();
@@ -76,10 +88,10 @@ impl Session {
                 elapsed_ms,
                 rows.len()
             );
-            rows
+            Ok(rows)
         } else {
             let (rendered_sql, params) =
-                engine::render_template(sql, sql, args, self.pool.as_ref());
+                engine::render_template(sql, sql, args, self.pool.as_ref())?;
             let conn = self.pool.connection().await?;
             let start = Instant::now();
             let rows = conn.query(&rendered_sql, &params).await?;
@@ -91,9 +103,8 @@ impl Session {
                 elapsed_ms,
                 rows.len()
             );
-            rows
-        };
-        Self::map_rows(rows)
+            Ok(rows)
+        }
     }
 
     /// 将行数据映射为目标类型

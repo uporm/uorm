@@ -34,8 +34,8 @@ impl SqliteDriver {
         }
     }
 
-    pub fn name(mut self, name: String) -> Self {
-        self.name = name;
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
         self
     }
 

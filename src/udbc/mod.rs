@@ -1,5 +1,3 @@
-pub mod value;
-
 pub mod connection;
 pub mod deserializer;
 pub mod driver;
@@ -8,6 +6,7 @@ pub mod mysql;
 pub mod serializer;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+pub mod value;
 
 pub const DEFAULT_DB_NAME: &str = "default";
 

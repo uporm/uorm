@@ -13,8 +13,8 @@ fn test_multi_db_selection() {
     assert!(stmt.content.as_ref().unwrap().trim().contains("default"));
 
     // Test MySQL
-    let stmt =
-        mapper_loader::find_statement("multi_db.get_date", "mysql").expect("Should find mysql mapper");
+    let stmt = mapper_loader::find_statement("multi_db.get_date", "mysql")
+        .expect("Should find mysql mapper");
     assert_eq!(stmt.r#type, mapper_loader::StatementType::Select);
     assert!(stmt.content.as_ref().unwrap().trim().contains("mysql"));
 

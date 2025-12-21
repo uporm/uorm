@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use uorm::driver_manager::UORM;
 use uorm::mapper_loader;
-use uorm::udbc::sqlite::pool::SqliteDriver;
 use uorm::sql;
+use uorm::udbc::sqlite::pool::SqliteDriver;
 
 static TEST_SEQ: AtomicUsize = AtomicUsize::new(0);
 static TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));

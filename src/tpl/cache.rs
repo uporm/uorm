@@ -1,4 +1,4 @@
-use crate::tpl::AstNode;
+use crate::tpl::ast::AstNode;
 use crate::tpl::parser::parse_template;
 use dashmap::DashMap;
 use std::collections::hash_map::DefaultHasher;

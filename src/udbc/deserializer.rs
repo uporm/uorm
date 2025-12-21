@@ -170,4 +170,3 @@ impl<'de, 'a> Deserializer<'de> for ValueDeserializer<'a> {
         unit_struct newtype_struct bytes byte_buf option
     }
 }
-

@@ -43,12 +43,12 @@ impl TransactionContext {
         sql: &str,
         args: &T,
     ) -> Result<Vec<HashMap<String, Value>>, DbError> {
-        let (rendered_sql, params) = engine::render_template(sql, sql, args, self.driver.as_ref());
+        let (rendered_sql, params) = engine::render_template(sql, sql, args, self.driver.as_ref())?;
         self.conn.query(&rendered_sql, &params).await
     }
 
     pub async fn execute<T: Serialize>(&self, sql: &str, args: &T) -> Result<u64, DbError> {
-        let (rendered_sql, params) = engine::render_template(sql, sql, args, self.driver.as_ref());
+        let (rendered_sql, params) = engine::render_template(sql, sql, args, self.driver.as_ref())?;
         self.conn.execute(&rendered_sql, &params).await
     }
 

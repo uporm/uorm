@@ -1,8 +1,9 @@
+use crate::error::DbError;
 use crate::tpl::render::RenderBuffer;
 use crate::tpl::render_context::Context;
 use crate::tpl::{cache, render};
 use crate::udbc::driver::Driver;
-use crate::udbc::serializer::to_value;
+use crate::udbc::serializer::try_to_value;
 use crate::udbc::value::Value;
 
 /// 渲染模板，返回 SQL 和参数
@@ -11,12 +12,12 @@ pub fn render_template<T: serde::Serialize>(
     template_content: &str,
     param: &T,
     driver: &dyn Driver,
-) -> (String, Vec<(String, Value)>) {
+) -> Result<(String, Vec<(String, Value)>), DbError> {
     // 获取 AST（缓存）
     let ast = cache::get_ast(template_name, template_content);
 
     // 序列化参数为 Value
-    let value = to_value(param);
+    let value = try_to_value(param)?;
 
     // 创建渲染上下文
     let mut buf = RenderBuffer {
@@ -29,7 +30,7 @@ pub fn render_template<T: serde::Serialize>(
     let mut ctx = Context::new(&value);
     render::render(&ast, &mut ctx, &mut buf);
 
-    (buf.sql, buf.params)
+    Ok((buf.sql, buf.params))
 }
 
 // pub fn remove_template(template_name: &str) {
@@ -83,7 +84,7 @@ mod tests {
         };
         let driver = MockDriver;
 
-        let (sql, params) = render_template("test_simple", tpl, &user, &driver);
+        let (sql, params) = render_template("test_simple", tpl, &user, &driver).unwrap();
 
         assert_eq!(sql, "select * from user where name = ? and age = ?");
         assert_eq!(params.len(), 2);
@@ -122,7 +123,7 @@ mod tests {
             age: 20,
             name: Some("tom".to_string()),
         };
-        let (sql, params) = render_template("test_if_1", tpl, &args, &MockDriver);
+        let (sql, params) = render_template("test_if_1", tpl, &args, &MockDriver).unwrap();
         assert_eq!(
             sql,
             "select * from user where 1=1 and status = 1 and type = 'adult' and name = ?"
@@ -136,7 +137,7 @@ mod tests {
             age: 10,
             name: None,
         };
-        let (sql, params) = render_template("test_if_2", tpl, &args, &MockDriver);
+        let (sql, params) = render_template("test_if_2", tpl, &args, &MockDriver).unwrap();
         assert_eq!(sql, "select * from user where 1=1");
         assert_eq!(params.len(), 0);
     }
@@ -152,7 +153,7 @@ mod tests {
 
         let args = ForeachArgs { ids: vec![1, 2, 3] };
 
-        let (sql, params) = render_template("test_for", tpl, &args, &MockDriver);
+        let (sql, params) = render_template("test_for", tpl, &args, &MockDriver).unwrap();
         assert_eq!(sql, "select * from user where id in (?,?,?)");
         assert_eq!(params.len(), 3);
 
@@ -168,7 +169,7 @@ mod tests {
 
         // Empty list
         let args = ForeachArgs { ids: vec![] };
-        let (sql, params) = render_template("test_for_empty", tpl, &args, &MockDriver);
+        let (sql, params) = render_template("test_for_empty", tpl, &args, &MockDriver).unwrap();
         assert_eq!(sql, "select * from user where id in "); // Note: usually empty IN clause is invalid SQL, but engine renders what's asked
         assert_eq!(params.len(), 0);
     }
@@ -203,7 +204,7 @@ mod tests {
             ],
         };
 
-        let (sql, params) = render_template("test_nested", tpl, &user, &MockDriver);
+        let (sql, params) = render_template("test_nested", tpl, &user, &MockDriver).unwrap();
         // Expected: insert into user_roles (user, role) values (?, ?), (?, ?)
         assert_eq!(
             sql,

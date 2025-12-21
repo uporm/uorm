@@ -181,33 +181,34 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                 let name_str = String::from_utf8_lossy(name.as_ref());
 
                 if name_str == "mapper" {
-                    namespace = get_attribute(e, "namespace")
-                        .or_else(|| get_attribute(e, "Namespace"));
+                    namespace =
+                        get_attribute(e, "namespace").or_else(|| get_attribute(e, "Namespace"));
                 } else if let Some(stmt_type) = StatementType::from_str(&name_str) {
                     let id = get_attribute(e, "id")
                         .ok_or_else(|| anyhow::anyhow!("SQL 语句缺少 id 属性: {}", source))?;
-                    
+
                     let database_type = get_attribute(e, "databaseType");
-                    let use_generated_keys = parse_bool(get_attribute(e, "useGeneratedKeys").as_deref());
+                    let use_generated_keys =
+                        parse_bool(get_attribute(e, "useGeneratedKeys").as_deref());
                     let key_column = get_attribute(e, "keyColumn");
 
                     // 获取当前标签的结束位置作为内容的起始位置
                     let start_pos = reader.buffer_position() as usize;
-                    
+
                     // 寻找匹配的结束标签
                     let end_pos = read_until_end_tag(&mut reader, &name_str, &mut Vec::new())?;
-                    
+
                     // 计算内容结束位置：reader.buffer_position() 在读完结束标签后，减去结束标签长度
                     // 结束标签格式: </tag> -> 2 + tag_len + 1 (>) = 3 + tag_len
                     // 注意：quick-xml 0.3x buffer_position() 返回的是当前 buffer 的绝对偏移量
-                    
+
                     let tag_len = name.as_ref().len();
 
                     if end_pos < tag_len + 3 {
-                         anyhow::bail!("解析错误: 结束标签位置异常");
+                        anyhow::bail!("解析错误: 结束标签位置异常");
                     }
                     let content_end = end_pos - (tag_len + 3);
-                    
+
                     let content = if content_end > start_pos {
                         Some(xml[start_pos..content_end].to_string())
                     } else {
@@ -231,12 +232,17 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
         buf.clear();
     }
 
-    let namespace = namespace.ok_or_else(|| anyhow::anyhow!("Mapper XML 缺少 namespace 属性: {}", source))?;
+    let namespace =
+        namespace.ok_or_else(|| anyhow::anyhow!("Mapper XML 缺少 namespace 属性: {}", source))?;
     Ok((namespace, items))
 }
 
 // 辅助函数：读取直到遇到指定的结束标签，返回结束标签之后的位置
-fn read_until_end_tag(reader: &mut Reader<&[u8]>, target_tag: &str, buf: &mut Vec<u8>) -> Result<usize> {
+fn read_until_end_tag(
+    reader: &mut Reader<&[u8]>,
+    target_tag: &str,
+    buf: &mut Vec<u8>,
+) -> Result<usize> {
     let mut depth = 0;
     loop {
         match reader.read_event_into(buf) {
@@ -269,5 +275,8 @@ fn get_attribute(e: &BytesStart, key: &str) -> Option<String> {
 }
 
 fn parse_bool(s: Option<&str>) -> bool {
-    matches!(s.unwrap_or("").trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on")
+    matches!(
+        s.unwrap_or("").trim().to_ascii_lowercase().as_str(),
+        "true" | "1" | "yes" | "on"
+    )
 }

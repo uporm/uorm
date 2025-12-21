@@ -1,35 +1,15 @@
+use crate::error::DbError;
 use crate::udbc::value::Value;
 use serde::Serialize;
 use serde::ser::*;
 
 use std::collections::HashMap;
 
-#[derive(Debug)]
-pub enum Error {
-    Custom(String),
-}
-
-impl serde::ser::Error for Error {
-    fn custom<T: std::fmt::Display>(msg: T) -> Self {
-        Error::Custom(msg.to_string())
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Custom(s) => write!(f, "{}", s),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
 pub struct ValueSerializer;
 
 impl Serializer for ValueSerializer {
     type Ok = Value;
-    type Error = Error;
+    type Error = DbError;
     type SerializeSeq = ListSerializer;
     type SerializeTuple = ListSerializer;
     type SerializeTupleStruct = ListSerializer;
@@ -178,7 +158,7 @@ macro_rules! impl_serialize_seq {
     ($trait:ident, $method:ident) => {
         impl $trait for ListSerializer {
             type Ok = Value;
-            type Error = Error;
+            type Error = DbError;
 
             fn $method<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
                 self.vec.push(value.serialize(ValueSerializer)?);
@@ -204,7 +184,7 @@ pub struct MapSerializer {
 
 impl SerializeMap for MapSerializer {
     type Ok = Value;
-    type Error = Error;
+    type Error = DbError;
 
     fn serialize_key<T: ?Sized + Serialize>(&mut self, key: &T) -> Result<(), Self::Error> {
         let k = key.serialize(ValueSerializer)?;
@@ -212,7 +192,7 @@ impl SerializeMap for MapSerializer {
             self.key = Some(s);
             Ok(())
         } else {
-            Err(Error::Custom("Map key must be string".into()))
+            Err(DbError::Value("Map key must be string".to_string()))
         }
     }
 
@@ -221,7 +201,7 @@ impl SerializeMap for MapSerializer {
         let key = self
             .key
             .take()
-            .ok_or(Error::Custom("Missing key for value".into()))?;
+            .ok_or_else(|| DbError::Value("Missing key for value".to_string()))?;
         self.map.insert(key, v);
         Ok(())
     }
@@ -235,7 +215,7 @@ macro_rules! impl_serialize_struct {
     ($trait:ident) => {
         impl $trait for MapSerializer {
             type Ok = Value;
-            type Error = Error;
+            type Error = DbError;
 
             fn serialize_field<T: ?Sized + Serialize>(
                 &mut self,
@@ -257,6 +237,57 @@ macro_rules! impl_serialize_struct {
 impl_serialize_struct!(SerializeStruct);
 impl_serialize_struct!(SerializeStructVariant);
 
+pub fn try_to_value<T: Serialize>(t: &T) -> Result<Value, DbError> {
+    t.serialize(ValueSerializer)
+}
+
 pub fn to_value<T: Serialize>(t: &T) -> Value {
-    t.serialize(ValueSerializer).unwrap()
+    try_to_value(t).unwrap()
+}
+
+/// Convert any `T: Serialize` into a flat `Vec<Value>`.
+///
+/// Behavior:
+/// - Tuple / list → elements are returned as-is
+/// - Struct / map → values are collected (keys are discarded)
+/// - Scalar value → wrapped into a single-element vector
+///
+/// This is typically used for binding SQL parameters.
+pub fn to_values<T: Serialize>(t: &T) -> Result<Vec<Value>, DbError> {
+    let v = try_to_value(t)?;
+    let out = match v {
+        Value::List(vec) => vec,
+        Value::Map(map) => map.into_values().collect(),
+        other => vec![other],
+    };
+    Ok(out)
+}
+
+
+/* -------------------------------------------------------------------------- */
+/*                                   Tests                                    */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use crate::udbc::serializer::to_values;
+    use crate::udbc::value::Value;
+
+    /// Unit type should produce an empty parameter list
+    #[test]
+    fn test_to_values_unit() {
+        let args = ();
+        let values = to_values(&args).unwrap();
+        assert_eq!(values.len(), 0);
+    }
+
+    /// Tuple should be converted into multiple values in order
+    #[test]
+    fn test_to_values_tuple() {
+        let args = (1, "hello");
+        let values = to_values(&args).unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0], Value::I32(1));
+        assert_eq!(values[1], Value::Str("hello".to_string()));
+    }
 }

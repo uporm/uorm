@@ -1,4 +1,4 @@
-use crate::tpl::AstNode;
+use crate::tpl::ast::AstNode;
 
 /// 用于跟踪嵌套标签（如 <if> 和 <foreach>）的栈帧。
 enum TagFrame {

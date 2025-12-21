@@ -99,7 +99,10 @@ async fn demo_mapper_load_from_file_and_list() {
         .unwrap();
 
     let mapper = UORM.mapper(&db_name).unwrap();
-    let rows: Vec<User> = mapper.execute("test_ns.selectUser", &NoArgs {}).await.unwrap();
+    let rows: Vec<User> = mapper
+        .execute("test_ns.selectUser", &NoArgs {})
+        .await
+        .unwrap();
 
     let names: BTreeSet<String> = rows.into_iter().map(|u| u.name).collect();
     assert_eq!(
@@ -230,7 +233,10 @@ async fn demo_mapper_crud_with_generated_keys_and_args() {
     #[derive(Serialize)]
     struct NoArgs {}
 
-    let all: Vec<User> = mapper.execute("demo_user.list_all", &NoArgs {}).await.unwrap();
+    let all: Vec<User> = mapper
+        .execute("demo_user.list_all", &NoArgs {})
+        .await
+        .unwrap();
     assert_eq!(all.len(), 1);
     assert_eq!(all[0].id, 1);
 

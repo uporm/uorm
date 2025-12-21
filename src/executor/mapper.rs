@@ -1,6 +1,6 @@
 use crate::error::DbError;
 use crate::executor::session::Session;
-use crate::mapper_loader::{find_statement, SqlStatement, StatementType};
+use crate::mapper_loader::{SqlStatement, StatementType, find_statement};
 use crate::udbc::deserializer::ValueDeserializer;
 use crate::udbc::driver::Driver;
 use crate::udbc::value::Value;
@@ -39,8 +39,8 @@ impl Mapper {
 
         match stmt.r#type {
             StatementType::Select => {
-                let rows: Vec<Value> = self.session().query(sql, args).await?;
-                let value = Value::List(rows);
+                let rows = self.session().query_raw(sql, args).await?;
+                let value = Value::List(rows.into_iter().map(Value::Map).collect());
                 R::deserialize(ValueDeserializer { value: &value })
             }
             StatementType::Insert => {

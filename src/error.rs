@@ -29,6 +29,12 @@ impl serde::de::Error for DbError {
     }
 }
 
+impl serde::ser::Error for DbError {
+    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+        DbError::General(msg.to_string())
+    }
+}
+
 #[cfg(feature = "mysql")]
 impl From<mysql_async::Error> for DbError {
     fn from(e: mysql_async::Error) -> Self {
