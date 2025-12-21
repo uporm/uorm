@@ -66,7 +66,7 @@ impl Session {
         T: serde::Serialize,
         R: serde::de::DeserializeOwned,
     {
-        if let Ok(ctx) = TX_CONTEXT.try_with(|tx| tx.clone()) {
+        let rows = if let Ok(ctx) = TX_CONTEXT.try_with(|tx| tx.clone()) {
             let start = Instant::now();
             let rows = ctx.lock().await.query(sql, args).await?;
             let elapsed_ms = start.elapsed().as_millis();
@@ -76,7 +76,7 @@ impl Session {
                 elapsed_ms,
                 rows.len()
             );
-            Self::map_rows(rows)
+            rows
         } else {
             let (rendered_sql, params) =
                 engine::render_template(sql, sql, args, self.pool.as_ref());
@@ -91,8 +91,9 @@ impl Session {
                 elapsed_ms,
                 rows.len()
             );
-            Self::map_rows(rows)
-        }
+            rows
+        };
+        Self::map_rows(rows)
     }
 
     /// 将行数据映射为目标类型

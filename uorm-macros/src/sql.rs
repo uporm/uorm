@@ -10,26 +10,40 @@ use syn::{
 
 // 这里把 sql_* 宏参数统一解析成同一份结构，避免在每个宏里重复写解析逻辑
 struct SqlArgs {
+    value: Option<String>,
     id: Option<String>,
-    db_name: String,
+    database: Option<String>,
+    namespace: Option<String>,
 }
 
 impl Parse for SqlArgs {
     fn parse(input: ParseStream) -> Result<Self> {
+        let mut value = None;
         let mut id = None;
-        let mut db_name = "default".to_string();
+        let mut database = None;
+        let mut namespace = None;
 
         if input.is_empty() {
-            return Ok(SqlArgs { id, db_name });
+            return Ok(SqlArgs {
+                value,
+                id,
+                database,
+                namespace,
+            });
         }
 
-        // Try to parse a string literal first (positional id)
+        // Try to parse a string literal first (positional id/namespace)
         if input.peek(LitStr) {
             let s: LitStr = input.parse()?;
-            id = Some(s.value());
+            value = Some(s.value());
 
             if input.is_empty() {
-                return Ok(SqlArgs { id, db_name });
+                return Ok(SqlArgs {
+                    value,
+                    id,
+                    database,
+                    namespace,
+                });
             }
             input.parse::<Token![,]>()?;
         }
@@ -43,18 +57,38 @@ impl Parse for SqlArgs {
             {
                 if nv.path.is_ident("id") {
                     id = Some(lit_str.value());
-                } else if nv.path.is_ident("db_name") {
-                    db_name = lit_str.value();
+                } else if nv.path.is_ident("database") {
+                    database = Some(lit_str.value());
+                } else if nv.path.is_ident("namespace") {
+                    namespace = Some(lit_str.value());
                 }
             }
         }
 
-        Ok(SqlArgs { id, db_name })
+        Ok(SqlArgs {
+            value,
+            id,
+            database,
+            namespace,
+        })
     }
 }
 
-pub fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    let namespace = parse_macro_input!(args as LitStr).value();
+pub fn sql_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+    let input_clone = input.clone();
+    if syn::parse::<ItemStruct>(input_clone).is_ok() {
+        return sql_namespace_impl(args, input);
+    }
+    generate_mapper_call(args, input)
+}
+
+fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+    let sql_args = parse_macro_input!(args as SqlArgs);
+    let namespace = sql_args
+        .namespace
+        .or(sql_args.value)
+        .expect("Namespace is required for struct");
+
     let item_struct = parse_macro_input!(input as ItemStruct);
     let struct_name = &item_struct.ident;
 
@@ -69,7 +103,7 @@ pub fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream 
     TokenStream::from(expanded)
 }
 
-fn generate_mapper_call(args: TokenStream, input: TokenStream, method_name: &str) -> TokenStream {
+fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let sql_args = parse_macro_input!(args as SqlArgs);
     let item_fn = parse_macro_input!(input as ItemFn);
 
@@ -82,8 +116,11 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream, method_name: &str
     // 这里强制生成 async fn，保证 exec!() 内部可以直接使用 .await
     let async_token = quote! { async };
 
-    let id = sql_args.id.unwrap_or_else(|| fn_name.to_string());
-    let db_name = sql_args.db_name;
+    let id = sql_args
+        .id
+        .or(sql_args.value)
+        .unwrap_or_else(|| fn_name.to_string());
+    let db_name = sql_args.database.unwrap_or_else(|| "default".to_string());
 
     // Collect arguments for the struct
     let mut struct_fields = Vec::new();
@@ -99,9 +136,16 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream, method_name: &str
             field_inits.push(quote! { #ident: &#ident });
         }
     }
-    let method_ident = syn::Ident::new(method_name, Span::call_site());
+    let method_ident = syn::Ident::new("execute", Span::call_site());
     let id_lit = LitStr::new(&id, Span::call_site());
     let db_name_lit = LitStr::new(&db_name, Span::call_site());
+
+    let namespace_tokens = if let Some(ns) = sql_args.namespace {
+        let ns_lit = LitStr::new(&ns, Span::call_site());
+        quote! { #ns_lit }
+    } else {
+        quote! { Self::NAMESPACE }
+    };
 
     let expanded = quote! {
         #vis #async_token fn #fn_name(#fn_args) #output {
@@ -112,7 +156,7 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream, method_name: &str
             let __uorm_args = __UormMapperArgs {
                 #(#field_inits),*
             };
-            let __uorm_namespace: &'static str = Self::NAMESPACE;
+            let __uorm_namespace: &'static str = #namespace_tokens;
             let __uorm_id: &'static str = #id_lit;
             let __uorm_db_name: &'static str = #db_name_lit;
 
@@ -134,24 +178,4 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream, method_name: &str
     };
 
     TokenStream::from(expanded)
-}
-
-pub fn sql_list_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    generate_mapper_call(args, input, "list")
-}
-
-pub fn sql_get_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    generate_mapper_call(args, input, "get")
-}
-
-pub fn sql_insert_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    generate_mapper_call(args, input, "insert")
-}
-
-pub fn sql_update_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    generate_mapper_call(args, input, "update")
-}
-
-pub fn sql_delete_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    generate_mapper_call(args, input, "delete")
 }

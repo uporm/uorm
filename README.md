@@ -205,22 +205,22 @@ struct User {
 struct UserDao;
 
 impl UserDao {
-    #[sql_get(id = "get_by_id", db_name = "default")]
+    #[sql_get(id = "get_by_id", database = "default")]
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_list(id = "list_all", db_name = "default")]
+    #[sql_list(id = "list_all", database = "default")]
     pub async fn list_all(args: ()) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_insert(id = "insert_user", db_name = "default")]
+    #[sql_insert(id = "insert_user", database = "default")]
     pub async fn insert(user: User) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_update(id = "update_age", db_name = "default")]
+    #[sql_update(id = "update_age", database = "default")]
     pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
@@ -230,7 +230,7 @@ impl UserDao {
 说明：
 
 - `exec!()` 只能在 `sql_*` 属性宏标注的方法体内使用（宏会注入运行时调用逻辑）
-- `db_name` 对应 `UORM.register(driver)` 时 driver 的 `name()`
+- `database` 对应 `UORM.register(driver)` 时 driver 的 `name()`
 
 ## XML Mapper 格式
 

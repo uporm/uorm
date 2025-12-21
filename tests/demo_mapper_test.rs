@@ -70,7 +70,7 @@ async fn demo_mapper_load_from_file_and_list() {
         age: i64,
     }
 
-    mapper_loader::clear_mappers();
+    mapper_loader::clear();
 
     let (db_name, db_path) = setup_sqlite("demo_mapper_load_from_file_and_list").await;
     UORM.assets("tests/resources/mapper/test.xml").unwrap();
@@ -99,7 +99,7 @@ async fn demo_mapper_load_from_file_and_list() {
         .unwrap();
 
     let mapper = UORM.mapper(&db_name).unwrap();
-    let rows: Vec<User> = mapper.list("test_ns.selectUser", &NoArgs {}).await.unwrap();
+    let rows: Vec<User> = mapper.execute("test_ns.selectUser", &NoArgs {}).await.unwrap();
 
     let names: BTreeSet<String> = rows.into_iter().map(|u| u.name).collect();
     assert_eq!(
@@ -135,7 +135,7 @@ async fn demo_mapper_crud_with_generated_keys_and_args() {
         age: i64,
     }
 
-    mapper_loader::clear_mappers();
+    mapper_loader::clear();
 
     let xml = r#"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -170,7 +170,7 @@ async fn demo_mapper_crud_with_generated_keys_and_args() {
     let mapper = UORM.mapper(&db_name).unwrap();
 
     let affected: i64 = mapper
-        .insert(
+        .execute(
             "demo_user.insert_user",
             &NewUser {
                 id: 1,
@@ -183,7 +183,7 @@ async fn demo_mapper_crud_with_generated_keys_and_args() {
     assert_eq!(affected, 1);
 
     let affected: i64 = mapper
-        .insert(
+        .execute(
             "demo_user.insert_user",
             &NewUser {
                 id: 2,
@@ -196,33 +196,33 @@ async fn demo_mapper_crud_with_generated_keys_and_args() {
     assert_eq!(affected, 1);
 
     let alice: User = mapper
-        .get("demo_user.get_by_id", &IdArg { id: 1 })
+        .execute("demo_user.get_by_id", &IdArg { id: 1 })
         .await
         .unwrap();
     assert_eq!(alice.name, "alice");
     assert_eq!(alice.age, 18);
 
     let older: Vec<User> = mapper
-        .list("demo_user.list_by_min_age", &MinAgeArg { age: 19 })
+        .execute("demo_user.list_by_min_age", &MinAgeArg { age: 19 })
         .await
         .unwrap();
     assert_eq!(older.len(), 1);
     assert_eq!(older[0].name, "bob");
 
-    let affected = mapper
-        .update("demo_user.update_age", &UpdateAgeArg { id: 1, age: 21 })
+    let affected: i64 = mapper
+        .execute("demo_user.update_age", &UpdateAgeArg { id: 1, age: 21 })
         .await
         .unwrap();
     assert_eq!(affected, 1);
 
     let alice: User = mapper
-        .get("demo_user.get_by_id", &IdArg { id: 1 })
+        .execute("demo_user.get_by_id", &IdArg { id: 1 })
         .await
         .unwrap();
     assert_eq!(alice.age, 21);
 
-    let affected = mapper
-        .delete("demo_user.delete_by_id", &IdArg { id: 2 })
+    let affected: i64 = mapper
+        .execute("demo_user.delete_by_id", &IdArg { id: 2 })
         .await
         .unwrap();
     assert_eq!(affected, 1);
@@ -230,7 +230,7 @@ async fn demo_mapper_crud_with_generated_keys_and_args() {
     #[derive(Serialize)]
     struct NoArgs {}
 
-    let all: Vec<User> = mapper.list("demo_user.list_all", &NoArgs {}).await.unwrap();
+    let all: Vec<User> = mapper.execute("demo_user.list_all", &NoArgs {}).await.unwrap();
     assert_eq!(all.len(), 1);
     assert_eq!(all[0].id, 1);
 

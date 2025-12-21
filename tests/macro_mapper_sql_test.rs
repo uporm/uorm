@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use uorm::{sql_delete, sql_get, sql_insert, sql_list, sql_namespace, sql_update};
+use uorm::sql;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct User {
@@ -7,11 +7,11 @@ pub struct User {
     name: String,
 }
 
-#[sql_namespace("user")]
+#[sql("user")]
 struct UserDao;
 
 impl UserDao {
-    #[sql_list("list")]
+    #[sql("list")]
     pub async fn list(name: String) -> Result<Vec<User>, uorm::error::DbError> {
         // Custom logic before exec
         let _ = name.len();
@@ -19,7 +19,7 @@ impl UserDao {
     }
 
     // Test with named args in macro
-    #[sql_get(id = "get_by_id")]
+    #[sql(id = "get_by_id")]
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
         println!("Getting user with id: {}", id);
         let res = exec!();
@@ -28,17 +28,17 @@ impl UserDao {
         res
     }
 
-    #[sql_insert("insert")]
+    #[sql("insert")]
     pub async fn insert(user: User) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_update(id = "update", db_name = "default")]
+    #[sql(id = "update", database = "default")]
     pub async fn update(id: i64, name: String) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_delete("delete")]
+    #[sql("delete")]
     pub async fn delete(id: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }

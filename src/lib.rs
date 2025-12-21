@@ -9,7 +9,7 @@ pub mod udbc;
 #[doc(hidden)]
 pub use ctor;
 pub use uorm_macros::mapper_assets;
-pub use uorm_macros::{sql_delete, sql_get, sql_insert, sql_list, sql_namespace, sql_update};
+pub use uorm_macros::sql;
 
 #[macro_export]
 macro_rules! exec {

@@ -60,31 +60,31 @@ struct UserDao;
 
 impl UserDao {
     // 查询单个用户
-    #[sql_get(id = "get_by_id", db_name = "default")]
+    #[sql_get(id = "get_by_id", database = "default")]
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
     // 查询用户列表
-    #[sql_list(id = "list_all", db_name = "default")]
+    #[sql_list(id = "list_all", database = "default")]
     pub async fn list_all(args: ()) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
     // 插入用户
-    #[sql_insert(id = "insert_user", db_name = "default")]
+    #[sql_insert(id = "insert_user", database = "default")]
     pub async fn insert(user: User) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
 
     // 更新用户年龄
-    #[sql_update(id = "update_age", db_name = "default")]
+    #[sql_update(id = "update_age", database = "default")]
     pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
     // 删除用户
-    #[sql_delete(id = "delete_user", db_name = "default")]
+    #[sql_delete(id = "delete_user", database = "default")]
     pub async fn delete(id: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
@@ -309,7 +309,7 @@ impl UserDao {
     }
 
     // 使用特定数据库
-    #[sql_get(id = "get_by_id", db_name = "replica_db")]
+    #[sql_get(id = "get_by_id", database = "replica_db")]
     pub async fn get_from_replica(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }

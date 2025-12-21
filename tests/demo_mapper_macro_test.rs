@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use uorm::driver_manager::UORM;
 use uorm::mapper_loader;
 use uorm::udbc::sqlite::pool::SqliteDriver;
-use uorm::{sql_delete, sql_get, sql_insert, sql_list, sql_namespace, sql_update};
+use uorm::sql;
 
 static TEST_SEQ: AtomicUsize = AtomicUsize::new(0);
 static TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -68,46 +68,46 @@ struct NewUser {
     age: i64,
 }
 
-#[sql_namespace("macro_user")]
+#[sql("macro_user")]
 struct UserDao;
 
 impl UserDao {
-    #[sql_insert(id = "insert_user", db_name = "demo_mapper_macro")]
+    #[sql(id = "insert_user", database = "demo_mapper_macro")]
     pub async fn create(user: NewUser) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_get(id = "get_by_id", db_name = "demo_mapper_macro")]
+    #[sql(id = "get_by_id", database = "demo_mapper_macro")]
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_list(id = "list_all", db_name = "demo_mapper_macro")]
+    #[sql(id = "list_all", database = "demo_mapper_macro")]
     pub async fn list_all(args: ()) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_list(id = "list_by_min_age", db_name = "demo_mapper_macro")]
+    #[sql(id = "list_by_min_age", database = "demo_mapper_macro")]
     pub async fn list_by_min_age(min_age: i64) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_update(id = "update_age", db_name = "demo_mapper_macro")]
+    #[sql(id = "update_age", database = "demo_mapper_macro")]
     pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_delete(id = "delete_by_id", db_name = "demo_mapper_macro")]
+    #[sql(id = "delete_by_id", database = "demo_mapper_macro")]
     pub async fn delete(id: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_list(id = "list_by_ids", db_name = "demo_mapper_macro")]
+    #[sql(id = "list_by_ids", database = "demo_mapper_macro")]
     pub async fn list_by_ids(ids: Vec<i64>) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_insert(id = "insert", db_name = "default")]
+    #[sql(id = "insert", database = "default")]
     pub async fn insert_auto_id(name: String, age: i64) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
@@ -117,7 +117,7 @@ impl UserDao {
 async fn demo_mapper_macro_basic_crud() {
     let _guard = TEST_LOCK.lock().await;
 
-    mapper_loader::clear_mappers();
+    mapper_loader::clear();
     UORM.assets("tests/resources/mapper/macro_user.xml")
         .unwrap();
 
@@ -201,7 +201,7 @@ async fn demo_mapper_macro_basic_crud() {
 async fn demo_mapper_macro_auto_id_insert() {
     let _guard = TEST_LOCK.lock().await;
 
-    mapper_loader::clear_mappers();
+    mapper_loader::clear();
     UORM.assets("tests/resources/mapper/macro_user.xml")
         .unwrap();
 
@@ -224,7 +224,7 @@ async fn demo_mapper_macro_auto_id_insert() {
     // 注意：list_all 使用的是 demo_mapper_macro 数据库，但我们需要为 default 数据库创建一个新的 UserDao
     // 或者我们可以直接使用 mapper 来查询
     let mapper = UORM.mapper("default").unwrap();
-    let all: Vec<User> = mapper.list("macro_user.list_all", &()).await.unwrap();
+    let all: Vec<User> = mapper.execute("macro_user.list_all", &()).await.unwrap();
     assert_eq!(all.len(), 2);
     assert_eq!(all[0].name, "alice");
     assert_eq!(all[1].name, "bob");
