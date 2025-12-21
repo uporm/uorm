@@ -47,7 +47,7 @@ impl Session {
         } else {
             let (rendered_sql, params) =
                 engine::render_template(sql, sql, args, self.pool.as_ref())?;
-            let conn = self.pool.connection().await?;
+            let mut conn = self.pool.acquire().await?;
             let start = Instant::now();
             let result = conn.execute(&rendered_sql, &params).await;
             let elapsed_ms = start.elapsed().as_millis();
@@ -92,7 +92,7 @@ impl Session {
         } else {
             let (rendered_sql, params) =
                 engine::render_template(sql, sql, args, self.pool.as_ref())?;
-            let conn = self.pool.connection().await?;
+            let mut conn = self.pool.acquire().await?;
             let start = Instant::now();
             let rows = conn.query(&rendered_sql, &params).await?;
             let elapsed_ms = start.elapsed().as_millis();
@@ -124,7 +124,7 @@ impl Session {
         if let Ok(ctx) = TX_CONTEXT.try_with(|tx| tx.clone()) {
             ctx.lock().await.last_insert_id().await
         } else {
-            let conn = self.pool.connection().await?;
+            let mut conn = self.pool.acquire().await?;
             conn.last_insert_id().await
         }
     }

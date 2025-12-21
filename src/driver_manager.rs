@@ -5,6 +5,7 @@ use dashmap::DashMap;
 use crate::error::DbError;
 use crate::executor::mapper::Mapper;
 use crate::executor::session::Session;
+use crate::udbc::DEFAULT_DB_NAME;
 use crate::udbc::driver::Driver;
 
 // 全局单例（Rust 1.80+ 推荐）
@@ -31,8 +32,14 @@ impl DriverManager {
 
     /// 注册数据库连接池
     pub fn register(&self, driver: impl Driver + 'static) -> Result<(), DbError> {
-        self.pools
-            .insert(driver.name().to_string(), Arc::new(driver));
+        let name = driver.name().to_string();
+        if name == DEFAULT_DB_NAME && self.pools.contains_key(&name) {
+            return Err(DbError::General(format!(
+                "Driver with name '{}' already registered",
+                name
+            )));
+        }
+        self.pools.insert(name, Arc::new(driver));
         Ok(())
     }
 

@@ -1,129 +1,148 @@
 use async_trait::async_trait;
 use rusqlite::params_from_iter;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::sqlite::value_codec::{from_sqlite_value, to_sqlite_value};
 use crate::udbc::value::Value;
 
+/// Connection implementation for SQLite.
+///
+/// Wraps a `rusqlite::Connection` and executes queries in a blocking thread
+/// to be compatible with async runtime (tokio).
 pub struct SqliteConnection {
-    conn: Arc<Mutex<rusqlite::Connection>>,
+    /// The underlying SQLite connection.
+    /// Wrapped in Option to allow moving it into the blocking task.
+    conn: Option<rusqlite::Connection>,
 }
 
 impl SqliteConnection {
     pub fn new(conn: rusqlite::Connection) -> Self {
-        Self {
-            conn: Arc::new(Mutex::new(conn)),
-        }
+        Self { conn: Some(conn) }
+    }
+
+    /// Helper method to run a blocking closure with the database connection.
+    ///
+    /// This method handles the boilerplate of moving the connection into a `spawn_blocking` task
+    /// and moving it back after execution.
+    async fn run_blocking<F, T>(&mut self, f: F) -> Result<T, DbError>
+    where
+        F: FnOnce(&mut rusqlite::Connection) -> Result<T, rusqlite::Error> + Send + 'static,
+        T: Send + 'static,
+    {
+        // Take the connection from the struct.
+        // If it's None, it means the connection was lost (e.g., due to a previous panic).
+        let conn = self
+            .conn
+            .take()
+            .ok_or_else(|| DbError::Database("Connection closed".to_string()))?;
+
+        // Spawn a blocking task to run the database operation.
+        let (conn, result) = tokio::task::spawn_blocking(move || {
+            let mut conn = conn;
+            let result = f(&mut conn);
+            (conn, result)
+        })
+        .await
+        .map_err(|e| DbError::Database(format!("Task failed: {}", e)))?;
+
+        // Put the connection back.
+        self.conn = Some(conn);
+
+        // Return the result of the database operation.
+        result.map_err(|e| DbError::Database(e.to_string()))
     }
 }
 
 #[async_trait]
 impl Connection for SqliteConnection {
     async fn query(
-        &self,
+        &mut self,
         sql: &str,
         args: &[(String, Value)],
     ) -> Result<Vec<HashMap<String, Value>>, DbError> {
         let sql = sql.to_string();
+        // Convert arguments to SQLite values.
         let params = args
             .iter()
             .map(|(_, v)| to_sqlite_value(v))
             .collect::<Vec<_>>();
-        let conn = self.conn.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.blocking_lock();
+
+        self.run_blocking(move |conn| {
             let mut stmt = conn.prepare(&sql)?;
             let column_count = stmt.column_count();
-            let column_names = (0..column_count)
+            
+            // pre-allocate column names to avoid repeated lookups
+            let column_names: Vec<String> = (0..column_count)
                 .map(|i| {
                     stmt.column_name(i)
                         .map(|s| s.to_string())
                         .unwrap_or_else(|_| i.to_string())
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
             let mut rows = stmt.query(params_from_iter(params))?;
             let mut out = Vec::new();
 
             while let Some(row) = rows.next()? {
                 let mut map = HashMap::with_capacity(column_count);
-                for i in 0..column_count {
-                    let name = column_names
-                        .get(i)
-                        .cloned()
-                        .unwrap_or_else(|| i.to_string());
+                for (i, name) in column_names.iter().enumerate() {
                     let v = row.get_ref(i)?;
-                    map.insert(name, from_sqlite_value(v));
+                    map.insert(name.clone(), from_sqlite_value(v));
                 }
                 out.push(map);
             }
-
-            Ok::<_, DbError>(out)
+            Ok(out)
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
     }
 
-    async fn execute(&self, sql: &str, args: &[(String, Value)]) -> Result<u64, DbError> {
+    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64, DbError> {
         let sql = sql.to_string();
         let params = args
             .iter()
             .map(|(_, v)| to_sqlite_value(v))
             .collect::<Vec<_>>();
-        let conn = self.conn.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.blocking_lock();
-            let affected = conn.execute(&sql, params_from_iter(params))?;
-            Ok::<_, DbError>(affected as u64)
+
+        self.run_blocking(move |conn| {
+            let count = conn.execute(&sql, params_from_iter(params))?;
+            Ok(count as u64)
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
     }
 
-    async fn last_insert_id(&self) -> Result<u64, DbError> {
-        let conn = self.conn.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.blocking_lock();
-            Ok::<_, DbError>(conn.last_insert_rowid().max(0) as u64)
+    async fn last_insert_id(&mut self) -> Result<u64, DbError> {
+        self.run_blocking(|conn| {
+            let id = conn.last_insert_rowid();
+            // Ensure non-negative ID, though rowid is usually i64.
+            Ok(id.max(0) as u64)
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
     }
 
-    async fn begin(&self) -> Result<(), DbError> {
-        let conn = self.conn.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.blocking_lock();
-            conn.execute_batch("BEGIN")?;
-            Ok::<_, DbError>(())
+    async fn begin(&mut self) -> Result<(), DbError> {
+        self.run_blocking(|conn| {
+            conn.execute("BEGIN", [])?;
+            Ok(())
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
     }
 
-    async fn commit(&self) -> Result<(), DbError> {
-        let conn = self.conn.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.blocking_lock();
-            conn.execute_batch("COMMIT")?;
-            Ok::<_, DbError>(())
+    async fn commit(&mut self) -> Result<(), DbError> {
+        self.run_blocking(|conn| {
+            conn.execute("COMMIT", [])?;
+            Ok(())
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
     }
 
-    async fn rollback(&self) -> Result<(), DbError> {
-        let conn = self.conn.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.blocking_lock();
-            conn.execute_batch("ROLLBACK")?;
-            Ok::<_, DbError>(())
+    async fn rollback(&mut self) -> Result<(), DbError> {
+        self.run_blocking(|conn| {
+            conn.execute("ROLLBACK", [])?;
+            Ok(())
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
     }
 }
+

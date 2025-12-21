@@ -3,7 +3,7 @@ use thiserror::Error;
 /// Represents errors that can occur in the RDBC module.
 #[derive(Error, Debug)]
 pub enum DbError {
-    #[error("General error: {0}")]
+    #[error("{0}")]
     General(String),
     #[error("Driver error: {0}")]
     Driver(#[source] Box<dyn std::error::Error + Send + Sync>),

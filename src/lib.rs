@@ -1,6 +1,7 @@
 pub mod driver_manager;
 pub mod error;
 pub mod executor;
+#[doc(hidden)]
 pub mod mapper_loader;
 pub(crate) mod tpl;
 pub mod transaction;

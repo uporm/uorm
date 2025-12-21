@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use std::sync::Arc;
+use std::str::FromStr;
 use std::time::Duration;
 
 use crate::error::DbError;
@@ -10,15 +10,43 @@ use crate::udbc::{ConnectionOptions, DEFAULT_DB_NAME};
 
 const SQLITE_TYPE: &str = "sqlite";
 
+#[derive(Debug, Clone)]
 enum SqliteTarget {
     Memory,
     Path(String),
 }
 
+impl FromStr for SqliteTarget {
+    type Err = DbError;
+
+    fn from_str(url: &str) -> Result<Self, Self::Err> {
+        let url = url.trim();
+        // Support "sqlite://" or "sqlite:" prefix, or no prefix
+        let path = if let Some(stripped) = url.strip_prefix("sqlite://") {
+            stripped
+        } else if let Some(stripped) = url.strip_prefix("sqlite:") {
+            stripped
+        } else {
+            url
+        };
+
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(DbError::InvalidDatabaseUrl(url.to_string()));
+        }
+
+        if path == ":memory:" {
+            Ok(SqliteTarget::Memory)
+        } else {
+            Ok(SqliteTarget::Path(path.to_string()))
+        }
+    }
+}
+
 pub struct SqliteDriver {
     url: String,
     name: String,
-    r#type: String,
+    // type is constant "sqlite", no need to store it
     options: Option<ConnectionOptions>,
     target: Option<SqliteTarget>,
 }
@@ -27,7 +55,6 @@ impl SqliteDriver {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             name: DEFAULT_DB_NAME.to_string(),
-            r#type: SQLITE_TYPE.to_string(),
             url: url.into(),
             options: None,
             target: None,
@@ -39,32 +66,13 @@ impl SqliteDriver {
         self
     }
 
-    pub fn options(mut self, options: ConnectionOptions) {
+    pub fn options(mut self, options: ConnectionOptions) -> Self {
         self.options = Some(options);
-    }
-
-    fn parse_target(url: &str) -> Result<SqliteTarget, DbError> {
-        let trimmed = url.trim();
-        let stripped = trimmed
-            .strip_prefix("sqlite://")
-            .or_else(|| trimmed.strip_prefix("sqlite:"))
-            .unwrap_or(trimmed)
-            .trim();
-
-        if stripped.is_empty() {
-            return Err(DbError::InvalidDatabaseUrl(url.to_string()));
-        }
-
-        if stripped == ":memory:" {
-            return Ok(SqliteTarget::Memory);
-        }
-
-        Ok(SqliteTarget::Path(stripped.to_string()))
+        self
     }
 
     pub fn build(mut self) -> Result<Self, DbError> {
-        let target = Self::parse_target(&self.url)?;
-        self.target = Some(target);
+        self.target = Some(SqliteTarget::from_str(&self.url)?);
         Ok(self)
     }
 
@@ -73,15 +81,26 @@ impl SqliteDriver {
         timeout_secs: u64,
     ) -> Result<rusqlite::Connection, DbError> {
         let conn = match target {
-            SqliteTarget::Memory => rusqlite::Connection::open_in_memory()?,
-            SqliteTarget::Path(p) => rusqlite::Connection::open(p)?,
-        };
-
-        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-
-        if timeout_secs > 0 {
-            conn.busy_timeout(Duration::from_secs(timeout_secs))?;
+            SqliteTarget::Memory => rusqlite::Connection::open_in_memory(),
+            SqliteTarget::Path(p) => rusqlite::Connection::open(p),
         }
+        .map_err(|e| DbError::Database(format!("Failed to open connection: {}", e)))?;
+
+        // Set busy_timeout FIRST to handle potential locks during PRAGMA execution
+        if timeout_secs > 0 {
+            conn.busy_timeout(Duration::from_secs(timeout_secs))
+                .map_err(|e| DbError::Database(format!("Failed to set busy_timeout: {}", e)))?;
+        }
+
+        // Enforce foreign keys for data integrity
+        conn.execute_batch("PRAGMA foreign_keys = ON;")
+            .map_err(|e| DbError::Database(format!("Failed to set foreign_keys: {}", e)))?;
+        
+        // WAL mode improves concurrency (readers don't block writers).
+        // synchronous = NORMAL is safe for WAL and faster.
+        // Note: Changing journal_mode requires a write lock on the database file.
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
+            .map_err(|e| DbError::Database(format!("Failed to set journal_mode: {}", e)))?;
 
         Ok(conn)
     }
@@ -94,33 +113,36 @@ impl Driver for SqliteDriver {
     }
 
     fn r#type(&self) -> &str {
-        &self.r#type
+        SQLITE_TYPE
     }
 
     fn placeholder(&self, _param_seq: usize, _param_name: &str) -> String {
         "?".to_string()
     }
 
-    async fn connection(&self) -> Result<Arc<dyn Connection>, DbError> {
+    async fn acquire(&self) -> Result<Box<dyn Connection>, DbError> {
         let target = self
             .target
             .as_ref()
-            .ok_or_else(|| DbError::Database("Target not initialized".to_string()))?;
-        let url_target = match target {
-            SqliteTarget::Memory => SqliteTarget::Memory,
-            SqliteTarget::Path(p) => SqliteTarget::Path(p.clone()),
-        };
+            .ok_or_else(|| DbError::Database("Driver not built (target missing). Call build() after new().".to_string()))?;
+        
+        let target_clone = target.clone();
         let timeout_secs = self.options.as_ref().map(|o| o.timeout).unwrap_or(0);
 
+        // SQLite operations are synchronous. Spawn a blocking task to avoid stalling the async runtime.
+        // NOTE: This creates a new physical connection per call. For high throughput, a connection pool (e.g. r2d2) is recommended.
+        // WARNING: For `SqliteTarget::Memory`, this creates a FRESH, empty database for every call.
+        // To share in-memory state, use a file-based URL with shared cache (e.g. "file::memory:?cache=shared") and SqliteTarget::Path.
         tokio::task::spawn_blocking(move || {
-            let conn = Self::open_connection(&url_target, timeout_secs)?;
-            Ok::<_, DbError>(Arc::new(SqliteConnection::new(conn)) as Arc<dyn Connection>)
+            let conn = Self::open_connection(&target_clone, timeout_secs)?;
+            Ok::<_, DbError>(Box::new(SqliteConnection::new(conn)) as Box<dyn Connection>)
         })
         .await
-        .map_err(|e| DbError::Database(e.to_string()))?
+        .map_err(|e| DbError::Database(format!("Task join error: {}", e)))?
     }
 
     async fn close(&self) -> Result<(), DbError> {
+        // No-op: connections are closed when dropped.
         Ok(())
     }
 }
@@ -133,7 +155,7 @@ mod tests {
     #[tokio::test]
     async fn test_sqlite_driver_in_memory() {
         let driver = SqliteDriver::new("sqlite::memory:").build().unwrap();
-        let conn = driver.connection().await.unwrap();
+        let mut conn = driver.acquire().await.unwrap();
 
         conn.execute(
             "CREATE TABLE user (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)",

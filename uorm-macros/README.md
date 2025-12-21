@@ -45,7 +45,7 @@ mapper_assets!("resources/**/*.xml");
 
 ```rust
 use serde::{Deserialize, Serialize};
-use uorm::{exec, sql_get, sql_insert, sql_list, sql_namespace, sql_update};
+use uorm::{exec, sql};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct User {
@@ -55,36 +55,36 @@ struct User {
 }
 
 // 定义命名空间
-#[sql_namespace("user")]
+#[sql("user")]
 struct UserDao;
 
 impl UserDao {
     // 查询单个用户
-    #[sql_get(id = "get_by_id", database = "default")]
+    #[sql("get_by_id")]
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
     // 查询用户列表
-    #[sql_list(id = "list_all", database = "default")]
+    #[sql("list_all")]
     pub async fn list_all(args: ()) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
     // 插入用户
-    #[sql_insert(id = "insert_user", database = "default")]
+    #[sql("insert_user")]
     pub async fn insert(user: User) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
 
     // 更新用户年龄
-    #[sql_update(id = "update_age", database = "default")]
+    #[sql("update_age")]
     pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
     // 删除用户
-    #[sql_delete(id = "delete_user", database = "default")]
+    #[sql("delete_user")]
     pub async fn delete(id: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
@@ -118,51 +118,44 @@ mapper_assets!("resources/mappers/*.xml");
 3. 生成一个 `#[uorm::ctor::ctor]` 修饰的函数，在程序启动时自动执行
 4. 调用 `uorm::mapper_loader::load_assets()` 注册资源
 
-### `sql_namespace`
+### `sql`
 
-**功能**：为 DAO 结构体定义 XML Mapper 的命名空间。
+**功能**：统一属性宏，用于定义 Namespace 和绑定 SQL 方法。
+
+**1. 结构体上使用（定义 Namespace）**
 
 **参数**：
-- `namespace`：XML Mapper 中定义的命名空间字符串
+- `namespace`：XML Mapper 中定义的命名空间字符串（位置参数或命名参数）
 
 **示例**：
 ```rust
-#[sql_namespace("user")]
+#[sql("user")] // 或 #[sql(namespace="user")]
 struct UserDao;
 ```
 
-**生成代码**：
-- 为结构体添加 `NAMESPACE` 常量
-- 例如：`pub const NAMESPACE: &'static str = "user";`
-
-### `sql_get` / `sql_list` / `sql_insert` / `sql_update` / `sql_delete`
-
-**功能**：将 SQL 操作绑定到异步方法上。
+**2. 方法上使用（绑定 SQL）**
 
 **参数**：
 - `id`（可选）：XML Mapper 中的 SQL ID，默认为方法名
-- `db_name`（可选）：数据库名称，默认为 "default"
+- `database`（可选）：数据库名称，默认为 "default"
 
-**支持两种参数格式**：
-
-1. **位置参数**：
+**示例**：
 ```rust
-#[sql_get("get_by_id")]
+// 使用位置参数指定 id
+#[sql("get_by_id")]
 pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
     exec!()
 }
-```
 
-2. **命名参数**：
-```rust
-#[sql_get(id = "get_by_id", db_name = "users_db")]
+// 使用命名参数
+#[sql(id = "get_by_id", database = "users_db")]
 pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
     exec!()
 }
 ```
 
 **`exec!()` 宏**：
-- 只能在 `sql_*` 属性宏标注的方法体内使用
+- 只能在 `sql` 属性宏标注的方法体内使用
 - 宏会注入运行时调用逻辑，执行对应的 SQL 操作
 - 自动处理参数序列化和结果反序列化
 
@@ -208,7 +201,7 @@ src/
 ### DAO 定义 (`src/dao/user_dao.rs`)
 ```rust
 use serde::{Deserialize, Serialize};
-use uorm::{exec, sql_delete, sql_get, sql_insert, sql_list, sql_namespace, sql_update};
+use uorm::{exec, sql};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -217,31 +210,31 @@ pub struct User {
     pub age: i64,
 }
 
-#[sql_namespace("user")]
+#[sql("user")]
 pub struct UserDao;
 
 impl UserDao {
-    #[sql_get("get_by_id")]
+    #[sql("get_by_id")]
     pub async fn get_by_id(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_list("list_all")]
+    #[sql("list_all")]
     pub async fn list_all() -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_insert("insert_user")]
+    #[sql("insert_user")]
     pub async fn insert(name: String, age: i64) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_update("update_age")]
+    #[sql("update_age")]
     pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_delete("delete_user")]
+    #[sql("delete_user")]
     pub async fn delete(id: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
@@ -286,7 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 你可以在 `exec!()` 前后添加自定义逻辑：
 
 ```rust
-#[sql_get("get_by_id")]
+#[sql("get_by_id")]
 pub async fn get_with_logging(id: i64) -> Result<User, uorm::error::DbError> {
     println!("Fetching user with id: {}", id);
     let result = exec!();
@@ -298,18 +291,18 @@ pub async fn get_with_logging(id: i64) -> Result<User, uorm::error::DbError> {
 ### 多数据库支持
 
 ```rust
-#[sql_namespace("user")]
+#[sql("user")]
 struct UserDao;
 
 impl UserDao {
     // 使用默认数据库
-    #[sql_get("get_by_id")]
+    #[sql("get_by_id")]
     pub async fn get_default(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
     // 使用特定数据库
-    #[sql_get(id = "get_by_id", database = "replica_db")]
+    #[sql(id = "get_by_id", database = "replica_db")]
     pub async fn get_from_replica(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
@@ -328,7 +321,7 @@ struct QueryParams {
     name_pattern: String,
 }
 
-#[sql_list("search_users")]
+#[sql("search_users")]
 pub async fn search(params: QueryParams) -> Result<Vec<User>, uorm::error::DbError> {
     exec!()
 }
@@ -345,7 +338,7 @@ pub async fn search(params: QueryParams) -> Result<Vec<User>, uorm::error::DbErr
 
 ## 注意事项
 
-1. **`exec!()` 宏限制**：只能在 `sql_*` 属性宏标注的方法体内使用
+1. **`exec!()` 宏限制**：只能在 `sql` 属性宏标注的方法体内使用
 2. **异步方法**：所有生成的方法都是 `async fn`
 3. **错误处理**：方法返回 `Result<T, uorm::error::DbError>`
 4. **编译时检查**：SQL ID 和命名空间在编译时验证

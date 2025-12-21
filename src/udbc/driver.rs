@@ -1,7 +1,6 @@
 use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use async_trait::async_trait;
-use std::sync::Arc;
 
 /// `Driver` defines a common interface for database drivers.
 ///
@@ -41,9 +40,9 @@ pub trait Driver: Send + Sync {
     /// Creates and returns a new database connection.
     ///
     /// # Returns
-    /// - `Ok(Arc<dyn Connection>)` if the connection is successfully established
+    /// - `Ok(Box<dyn Connection>)` if the connection is successfully established
     /// - `Err(DbError)` if connection creation fails
-    async fn connection(&self) -> Result<Arc<dyn Connection>, DbError>;
+    async fn acquire(&self) -> Result<Box<dyn Connection>, DbError>;
 
     /// Closes the driver and releases any associated resources.
     ///

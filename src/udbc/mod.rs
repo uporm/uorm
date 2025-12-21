@@ -1,12 +1,12 @@
 pub mod connection;
-pub mod deserializer;
+pub(crate) mod deserializer;
 pub mod driver;
 #[cfg(feature = "mysql")]
 pub mod mysql;
-pub mod serializer;
+pub(crate) mod serializer;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
-pub mod value;
+pub(crate) mod value;
 
 pub const DEFAULT_DB_NAME: &str = "default";
 

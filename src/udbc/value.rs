@@ -63,58 +63,58 @@ pub enum Value {
 /*                          From<T> implementations                           */
 /* -------------------------------------------------------------------------- */
 
-/// Allow automatic conversion from `bool` into `Value`
-impl From<bool> for Value {
-    fn from(v: bool) -> Self {
-        Value::Bool(v)
-    }
-}
-
-/// Allow automatic conversion from `i16` into `Value`
-impl From<i16> for Value {
-    fn from(v: i16) -> Self {
-        Value::I16(v)
-    }
-}
-
-/// Allow automatic conversion from `i32` into `Value`
-impl From<i32> for Value {
-    fn from(v: i32) -> Self {
-        Value::I32(v)
-    }
-}
-
-/// Allow automatic conversion from `i64` into `Value`
-impl From<i64> for Value {
-    fn from(v: i64) -> Self {
-        Value::I64(v)
-    }
-}
-
-/// Allow automatic conversion from `u8` into `Value`
-impl From<u8> for Value {
-    fn from(v: u8) -> Self {
-        Value::U8(v)
-    }
-}
-
-/// Allow automatic conversion from `f64` into `Value`
-impl From<f64> for Value {
-    fn from(v: f64) -> Self {
-        Value::F64(v)
-    }
-}
-
-/// Allow automatic conversion from `String` into `Value`
-impl From<String> for Value {
-    fn from(v: String) -> Self {
-        Value::Str(v)
-    }
-}
-
-/// Allow automatic conversion from `&str` into `Value`
-impl From<&str> for Value {
-    fn from(v: &str) -> Self {
-        Value::Str(v.to_string())
-    }
-}
+// Allow automatic conversion from `bool` into `Value`
+// impl From<bool> for Value {
+//     fn from(v: bool) -> Self {
+//         Value::Bool(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `i16` into `Value`
+// impl From<i16> for Value {
+//     fn from(v: i16) -> Self {
+//         Value::I16(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `i32` into `Value`
+// impl From<i32> for Value {
+//     fn from(v: i32) -> Self {
+//         Value::I32(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `i64` into `Value`
+// impl From<i64> for Value {
+//     fn from(v: i64) -> Self {
+//         Value::I64(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `u8` into `Value`
+// impl From<u8> for Value {
+//     fn from(v: u8) -> Self {
+//         Value::U8(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `f64` into `Value`
+// impl From<f64> for Value {
+//     fn from(v: f64) -> Self {
+//         Value::F64(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `String` into `Value`
+// impl From<String> for Value {
+//     fn from(v: String) -> Self {
+//         Value::Str(v)
+//     }
+// }
+//
+// /// Allow automatic conversion from `&str` into `Value`
+// impl From<&str> for Value {
+//     fn from(v: &str) -> Self {
+//         Value::Str(v.to_string())
+//     }
+// }

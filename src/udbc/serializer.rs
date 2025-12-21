@@ -237,32 +237,6 @@ macro_rules! impl_serialize_struct {
 impl_serialize_struct!(SerializeStruct);
 impl_serialize_struct!(SerializeStructVariant);
 
-pub fn try_to_value<T: Serialize>(t: &T) -> Result<Value, DbError> {
-    t.serialize(ValueSerializer)
-}
-
-pub fn to_value<T: Serialize>(t: &T) -> Value {
-    try_to_value(t).unwrap()
-}
-
-/// Convert any `T: Serialize` into a flat `Vec<Value>`.
-///
-/// Behavior:
-/// - Tuple / list → elements are returned as-is
-/// - Struct / map → values are collected (keys are discarded)
-/// - Scalar value → wrapped into a single-element vector
-///
-/// This is typically used for binding SQL parameters.
-pub fn to_values<T: Serialize>(t: &T) -> Result<Vec<Value>, DbError> {
-    let v = try_to_value(t)?;
-    let out = match v {
-        Value::List(vec) => vec,
-        Value::Map(map) => map.into_values().collect(),
-        other => vec![other],
-    };
-    Ok(out)
-}
-
 
 /* -------------------------------------------------------------------------- */
 /*                                   Tests                                    */
@@ -270,24 +244,33 @@ pub fn to_values<T: Serialize>(t: &T) -> Result<Vec<Value>, DbError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::udbc::serializer::to_values;
+    use serde::Serialize;
+    use crate::udbc::serializer::ValueSerializer;
     use crate::udbc::value::Value;
 
     /// Unit type should produce an empty parameter list
     #[test]
     fn test_to_values_unit() {
         let args = ();
-        let values = to_values(&args).unwrap();
-        assert_eq!(values.len(), 0);
+        let values = args.serialize(ValueSerializer).unwrap();
+        if let Value::List(list) = values {
+            assert_eq!(list.len(), 0);
+        } else {
+            panic!("Expected Value::List, got {:?}", values);
+        }
     }
 
     /// Tuple should be converted into multiple values in order
     #[test]
     fn test_to_values_tuple() {
         let args = (1, "hello");
-        let values = to_values(&args).unwrap();
-        assert_eq!(values.len(), 2);
-        assert_eq!(values[0], Value::I32(1));
-        assert_eq!(values[1], Value::Str("hello".to_string()));
+        let values = args.serialize(ValueSerializer).unwrap();
+        if let Value::List(list) = values {
+            assert_eq!(list.len(), 2);
+            assert_eq!(list[0], Value::I32(1));
+            assert_eq!(list[1], Value::Str("hello".to_string()));
+        } else {
+            panic!("Expected Value::List, got {:?}", values);
+        }
     }
 }

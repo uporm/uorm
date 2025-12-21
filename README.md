@@ -25,7 +25,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 - [安装](#安装)
 - [直接执行 SQL](#直接执行-sqlsession)
 - [事务](#事务)
-- [SQL 属性宏](#sql-属性宏sql_)
+- [SQL 属性宏](#sql-属性宏sql)
 - [XML Mapper 格式](#xml-mapper-格式)
 - [支持的数据库](#支持的数据库)
 - [高级功能](#高级功能)
@@ -45,7 +45,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 - 多数据源：通过 `DriverManager` 注册多个库（按 `db_name` 区分）
 - 过程宏：
   - `mapper_assets![...]`：编译期内嵌 XML 并在启动时自动加载
-  - `sql_namespace` + `sql_get/sql_list/sql_insert/sql_update/sql_delete`：把 `sql_id` 绑定到 DAO 方法里
+  - `sql`：统一属性宏，用于定义 Namespace (`#[sql("name")]`) 和绑定 SQL 方法 (`#[sql("id")]`)
 
 ## 安装
 
@@ -186,13 +186,13 @@ pub async fn create_in_tx() -> Result<i64, uorm::error::DbError> {
 }
 ```
 
-## SQL 属性宏（sql_*）
+## SQL 属性宏（sql）
 
 把 `namespace/id/db_name` 绑定到方法上，方法体里用 `exec!()` 执行对应 `sql_id`：
 
 ```rust
 use serde::{Deserialize, Serialize};
-use uorm::{exec, sql_get, sql_insert, sql_list, sql_namespace, sql_update};
+use uorm::{exec, sql};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct User {
@@ -201,26 +201,26 @@ struct User {
     age: i64,
 }
 
-#[sql_namespace("user")]
+#[sql("user")]
 struct UserDao;
 
 impl UserDao {
-    #[sql_get(id = "get_by_id", database = "default")]
+    #[sql("get_by_id")]
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_list(id = "list_all", database = "default")]
+    #[sql("list_all")]
     pub async fn list_all(args: ()) -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_insert(id = "insert_user", database = "default")]
+    #[sql("insert_user")]
     pub async fn insert(user: User) -> Result<i64, uorm::error::DbError> {
         exec!()
     }
 
-    #[sql_update(id = "update_age", database = "default")]
+    #[sql("update_age")]
     pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
         exec!()
     }
@@ -229,8 +229,9 @@ impl UserDao {
 
 说明：
 
-- `exec!()` 只能在 `sql_*` 属性宏标注的方法体内使用（宏会注入运行时调用逻辑）
-- `database` 对应 `UORM.register(driver)` 时 driver 的 `name()`
+- `exec!()` 只能在 `sql` 属性宏标注的方法体内使用（宏会注入运行时调用逻辑）
+- `#[sql("name")]` 在结构体上定义 Namespace
+- `#[sql("id")]` 在方法上绑定 SQL ID，支持 `database` 参数：`#[sql(id="...", database="...")]`
 
 ## XML Mapper 格式
 

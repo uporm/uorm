@@ -3,7 +3,7 @@ use crate::tpl::render::RenderBuffer;
 use crate::tpl::render_context::Context;
 use crate::tpl::{cache, render};
 use crate::udbc::driver::Driver;
-use crate::udbc::serializer::try_to_value;
+use crate::udbc::serializer::{ValueSerializer};
 use crate::udbc::value::Value;
 
 /// 渲染模板，返回 SQL 和参数
@@ -17,8 +17,7 @@ pub fn render_template<T: serde::Serialize>(
     let ast = cache::get_ast(template_name, template_content);
 
     // 序列化参数为 Value
-    let value = try_to_value(param)?;
-
+    let value = param.serialize(ValueSerializer)?;
     // 创建渲染上下文
     let mut buf = RenderBuffer {
         sql: String::with_capacity(template_content.len()),
@@ -45,7 +44,6 @@ mod tests {
     use crate::udbc::driver::Driver;
     use crate::udbc::value::Value;
     use serde::Serialize;
-    use std::sync::Arc;
 
     struct MockDriver;
     #[async_trait::async_trait]
@@ -61,7 +59,7 @@ mod tests {
         fn placeholder(&self, _seq: usize, _name: &str) -> String {
             "?".to_string()
         }
-        async fn connection(&self) -> Result<Arc<dyn Connection>, DbError> {
+        async fn acquire(&self) -> Result<Box<dyn Connection>, DbError> {
             todo!()
         }
         async fn close(&self) -> Result<(), DbError> {
