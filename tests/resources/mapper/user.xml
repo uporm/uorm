@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
+<mapper namespace="user">
+  <!-- Reusable SQL fragment -->
+  <sql id="cols">
+    id, name, age
+  </sql>
+
+  <sql id="all_cols">
+    id, name, age, status, create_time
+  </sql>
+
+  <!-- Select with conditional include -->
+  <select id="get_user_details">
+    SELECT
+    <if test="full != null and full == true">
+      <include refid="all_cols"/>
+    </if>
+    <if test="full == null or full == false">
+      <include refid="cols"/>
+    </if>
+    FROM users
+    WHERE id = #{id}
+  </select>
+
+  <!-- Simple Insert -->
+  <insert id="insert">
+    INSERT INTO users(name, age) VALUES (#{name}, #{age})
+  </insert>
+
+  <!-- Insert with object property access -->
+  <insert id="insert_user">
+    INSERT INTO users(id, name, age) VALUES (#{user.id}, #{user.name}, #{user.age})
+  </insert>
+
+  <!-- Batch Insert using foreach -->
+  <insert id="batch_insert">
+    INSERT INTO users (name, age) VALUES
+    <foreach item="user" collection="users" separator=",">
+      (#{user.name}, #{user.age})
+    </foreach>
+  </insert>
+
+  <!-- Simple Select -->
+  <select id="get_by_id">
+    SELECT <include refid="cols"/> FROM users WHERE id = #{id}
+  </select>
+
+  <!-- Select all -->
+  <select id="list_all">
+    SELECT <include refid="cols"/> FROM users ORDER BY id
+  </select>
+
+  <!-- Select with simple if condition -->
+  <select id="list_by_min_age">
+    SELECT <include refid="cols"/> FROM users WHERE age >= #{min_age} ORDER BY age, id
+  </select>
+
+  <!-- Select with complex if conditions (multiple optional filters) -->
+  <select id="search_users">
+    SELECT <include refid="cols"/> FROM users
+    WHERE 1=1
+    <if test="name != null">
+      AND name LIKE #{name}
+    </if>
+    <if test="min_age != null">
+      AND age >= #{min_age}
+    </if>
+    <if test="max_age != null">
+      AND age &lt;= #{max_age}
+    </if>
+    ORDER BY id
+  </select>
+
+  <!-- Select with logical operators in test expression -->
+  <select id="list_active_adults">
+    SELECT <include refid="cols"/> FROM users
+    WHERE 1=1
+    <if test="active == true and age >= 18">
+      AND status = 'active' AND age >= 18
+    </if>
+    ORDER BY id
+  </select>
+
+  <!-- Select with IN clause using foreach -->
+  <select id="list_by_ids">
+    SELECT <include refid="cols"/> FROM users WHERE id IN
+    <foreach item="id" collection="ids" open="(" separator="," close=")">
+      #{id}
+    </foreach>
+    ORDER BY id
+  </select>
+
+  <!-- Simple Update -->
+  <update id="update_age">
+    UPDATE users SET age = #{age} WHERE id = #{id}
+  </update>
+
+  <!-- Selective Update using if tags -->
+  <update id="update_user_selective">
+    UPDATE users
+    SET id = id
+    <if test="name != null">
+      , name = #{name}
+    </if>
+    <if test="age != null">
+      , age = #{age}
+    </if>
+    WHERE id = #{id}
+  </update>
+
+  <!-- Simple Delete -->
+  <delete id="delete_by_id">
+    DELETE FROM users WHERE id = #{id}
+  </delete>
+
+  <!-- Delete with complex condition -->
+  <delete id="delete_by_condition">
+    DELETE FROM users
+    WHERE 1=1
+    <if test="name != null">
+      AND name = #{name}
+    </if>
+    <if test="max_age != null">
+      AND age &lt; #{max_age}
+    </if>
+  </delete>
+</mapper>

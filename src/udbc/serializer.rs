@@ -237,16 +237,15 @@ macro_rules! impl_serialize_struct {
 impl_serialize_struct!(SerializeStruct);
 impl_serialize_struct!(SerializeStructVariant);
 
-
 /* -------------------------------------------------------------------------- */
 /*                                   Tests                                    */
 /* -------------------------------------------------------------------------- */
 
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
     use crate::udbc::serializer::ValueSerializer;
     use crate::udbc::value::Value;
+    use serde::Serialize;
 
     /// Unit type should produce an empty parameter list
     #[test]

@@ -77,12 +77,12 @@ impl TransactionContext {
 
 impl Drop for TransactionContext {
     fn drop(&mut self) {
-        if !self.committed {
-            if let Some(mut conn) = self.conn.take() {
-                tokio::spawn(async move {
-                    let _ = conn.rollback().await;
-                });
-            }
+        if !self.committed
+            && let Some(mut conn) = self.conn.take()
+        {
+            tokio::spawn(async move {
+                let _ = conn.rollback().await;
+            });
         }
     }
 }

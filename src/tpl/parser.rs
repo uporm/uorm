@@ -1,10 +1,17 @@
-use crate::tpl::ast::AstNode;
+use crate::tpl::ast::{AstNode, Expr, Op};
+use crate::udbc::value::Value;
+use std::collections::HashMap;
 
-/// 用于跟踪嵌套标签（如 <if> 和 <foreach>）的栈帧。
+/// Represents a stack frame during template parsing to handle nested tags.
+///
+/// When a start tag (like `<if>`) is encountered, a new `TagFrame` is pushed onto the stack.
+/// This allows the parser to keep track of the current tag's attributes and nesting level.
 enum TagFrame {
+    /// An `<if>` tag frame, storing the test expression.
     If {
-        test: String,
+        test: Expr,
     },
+    /// A `<foreach>` tag frame, storing the iteration details.
     Foreach {
         item: String,
         collection: String,
@@ -14,43 +21,60 @@ enum TagFrame {
     },
 }
 
-/// 模板语言解析器。
+/// A hand-written recursive-descent style parser for the SQL template language.
 ///
-/// 它维护解析状态，包括位置、节点栈和标签栈。
+/// It supports:
+/// - Plain text (SQL)
+/// - Variable interpolation: `#{var}`
+/// - Conditional logic: `<if test="...">...</if>`
+/// - Iteration: `<foreach item="..." collection="..." ...>...</foreach>`
+/// - Template inclusion: `<include refid="..." />`
+///
+/// The parser uses a stack-based approach to handle nested tags correctly.
 struct Parser<'a> {
+    /// The original template string being parsed.
     template: &'a str,
+    /// Current character position in the template.
     pos: usize,
+    /// A stack of node collections. Each level corresponds to the children of a nested tag.
+    /// The first element is always the root-level nodes.
     nodes_stack: Vec<Vec<AstNode>>,
+    /// A stack of active tags being parsed.
     tag_stack: Vec<TagFrame>,
 }
 
 impl<'a> Parser<'a> {
+    /// Creates a new parser instance for the given template string.
     fn new(template: &'a str) -> Self {
         Self {
             template,
             pos: 0,
-            nodes_stack: vec![Vec::new()], // 根级节点
+            nodes_stack: vec![Vec::new()], // Initialize with root level.
             tag_stack: Vec::new(),
         }
     }
 
+    /// Parses the entire template and returns a list of root-level `AstNode`s.
     fn parse(mut self) -> Vec<AstNode> {
         while self.pos < self.template.len() {
-            // 尝试优先解析结构化元素
+            // Try to parse structured elements (tags or variables) first.
             if self.try_parse_tag() || self.try_parse_var() {
                 continue;
             }
 
-            // 后备方案：解析为纯文本
+            // Fallback: parse as plain text if no structured elements match at current position.
             self.parse_text();
         }
 
+        // Close any tags that were left open (e.g., missing </if>).
         self.close_remaining_tags();
+        
+        // Return the root-level nodes.
         self.nodes_stack.pop().unwrap_or_default()
     }
 
-    /// 尝试解析标签：<if>, </if>, <foreach>, </foreach>, <include>。
-    /// 如果成功解析并消耗了一个标签，则返回 true。
+    /// Try to parse a tag: `<if>`, `</if>`, `<foreach>`, `</foreach>`, `<include>`.
+    /// Returns true if a tag was successfully parsed and consumed.
     fn try_parse_tag(&mut self) -> bool {
         let remaining = &self.template[self.pos..];
 
@@ -70,15 +94,15 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 处理 <if test="...">
+    /// Handle <if test="...">
     fn handle_if_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[4..end_idx]; // 跳过 "<if "
-            if let Some(test) = extract_attr(tag_content, "test") {
+            let tag_content = &remaining[4..end_idx]; // Skip "<if "
+            let attrs = parse_attributes(tag_content);
+            if let Some(test_str) = attrs.get("test") {
+                let test = parse_expr(test_str);
                 self.nodes_stack.push(Vec::new());
-                self.tag_stack.push(TagFrame::If {
-                    test: test.to_string(),
-                });
+                self.tag_stack.push(TagFrame::If { test });
                 self.pos += end_idx + 1;
                 return true;
             }
@@ -86,17 +110,15 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 处理 <foreach item="..." collection="...">
+    /// Handle <foreach item="..." collection="...">
     fn handle_foreach_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[9..end_idx]; // 跳过 "<foreach "
-            if let (Some(item), Some(collection)) = (
-                extract_attr(tag_content, "item"),
-                extract_attr(tag_content, "collection"),
-            ) {
-                let open = extract_attr(tag_content, "open").unwrap_or("");
-                let separator = extract_attr(tag_content, "separator").unwrap_or(",");
-                let close = extract_attr(tag_content, "close").unwrap_or("");
+            let tag_content = &remaining[9..end_idx]; // Skip "<foreach "
+            let attrs = parse_attributes(tag_content);
+            if let (Some(item), Some(collection)) = (attrs.get("item"), attrs.get("collection")) {
+                let open = attrs.get("open").map(|s| s.as_str()).unwrap_or("");
+                let separator = attrs.get("separator").map(|s| s.as_str()).unwrap_or(",");
+                let close = attrs.get("close").map(|s| s.as_str()).unwrap_or("");
 
                 self.nodes_stack.push(Vec::new());
                 self.tag_stack.push(TagFrame::Foreach {
@@ -113,11 +135,12 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 处理 <include refid="..." />
+    /// Handle <include refid="..." />
     fn handle_include_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[8..end_idx]; // 跳过 "<include"
-            if let Some(refid) = extract_attr(tag_content, "refid") {
+            let tag_content = &remaining[8..end_idx]; // Skip "<include"
+            let attrs = parse_attributes(tag_content);
+            if let Some(refid) = attrs.get("refid") {
                 self.append_node(AstNode::Include {
                     refid: refid.to_string(),
                 });
@@ -128,7 +151,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 处理闭合标签 </if> 和 </foreach>
+    /// Handle closing tags `</if>` and `</foreach>`.
     fn handle_close_tag(&mut self, remaining: &str) -> bool {
         if remaining.starts_with("</if>")
             && let Some(TagFrame::If { .. }) = self.tag_stack.last()
@@ -163,7 +186,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 尝试解析变量表达式 #{var}
+    /// Try to parse a variable expression: `#{var}`.
     fn try_parse_var(&mut self) -> bool {
         let remaining = &self.template[self.pos..];
         if remaining.starts_with("#{")
@@ -179,7 +202,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// 消耗文本直到遇到下一个特殊字符（'<' 或 '#{'）
+    /// Consume text until the next special sequence (`'<'` or `"#{"`).
     fn parse_text(&mut self) {
         let remaining = &self.template[self.pos..];
         let next_tag = remaining.find('<').unwrap_or(remaining.len());
@@ -190,21 +213,21 @@ impl<'a> Parser<'a> {
             self.append_text(&remaining[..next_stop]);
             self.pos += next_stop;
         } else {
-            // 未找到标签，或者处于可能但解析失败的标签/变量起始位置。
-            // 消耗一个字符并继续。
+            // Either no tag was found, or we're at a tag/var boundary that didn't parse.
+            // Consume one character to make progress and avoid infinite loops.
             self.append_text(&remaining[0..1]);
             self.pos += 1;
         }
     }
 
-    /// 辅助方法：将节点追加到当前活动作用域
+    /// Append a node to the current active scope.
     fn append_node(&mut self, node: AstNode) {
         if let Some(nodes) = self.nodes_stack.last_mut() {
             nodes.push(node);
         }
     }
 
-    /// 辅助方法：追加文本，如果可能则与前一个文本节点合并
+    /// Append text, merging with the previous text node when possible.
     fn append_text(&mut self, text: &str) {
         if let Some(nodes) = self.nodes_stack.last_mut() {
             if let Some(AstNode::Text(last_text)) = nodes.last_mut() {
@@ -215,7 +238,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// 关闭模板末尾所有未闭合的标签（自动闭合行为）
+    /// Auto-close any remaining unclosed tags at the end of the template.
     fn close_remaining_tags(&mut self) {
         while let Some(tag) = self.tag_stack.pop() {
             let body = self.nodes_stack.pop().unwrap_or_default();
@@ -241,12 +264,12 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// 将模板字符串解析为 AST 的主要入口点。
+/// Main entry point: parse a template string into an AST.
 pub fn parse_template(template: &str) -> Vec<AstNode> {
     Parser::new(template).parse()
 }
 
-/// 查找标签闭合 '>' 的索引，忽略引号内的内容。
+/// Find the index of the closing `>` for a tag, ignoring quoted content.
 fn find_tag_end(s: &str) -> Option<usize> {
     let mut in_quote = false;
     for (i, c) in s.char_indices() {
@@ -259,34 +282,127 @@ fn find_tag_end(s: &str) -> Option<usize> {
     None
 }
 
-/// 从标签内容中提取属性值。
-/// 例如：extract_attr("test=\"abc\"", "test") -> Some("abc")
-fn extract_attr<'a>(tag_content: &'a str, key: &str) -> Option<&'a str> {
-    let key_len = key.len();
-    for (i, _) in tag_content.match_indices(key) {
-        // 确保键前有空白字符或者是字符串的开头
-        if i > 0 {
-            let prev = tag_content.chars().nth(i - 1).unwrap();
-            if !prev.is_whitespace() {
-                continue;
-            }
+/// Parse attributes from tag content into a HashMap
+fn parse_attributes(content: &str) -> HashMap<String, String> {
+    let mut attrs = HashMap::new();
+
+    let mut rest = content;
+    while !rest.is_empty() {
+        rest = rest.trim_start();
+        if rest.is_empty() {
+            break;
         }
 
-        let remaining = &tag_content[i + key_len..];
-        let trimmed = remaining.trim_start();
+        // Find key end
+        let key_end = rest
+            .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+            .unwrap_or(rest.len());
+        if key_end == 0 {
+            // Should not happen if trim_start worked and we have valid chars.
+            // Consume one char to avoid infinite loop if garbage present
+            rest = &rest[1..];
+            continue;
+        }
+        let key = &rest[..key_end];
+        rest = rest[key_end..].trim_start();
 
-        // 期望 '=' 后跟带引号的字符串
-        if let Some(stripped) = trimmed.strip_prefix('=') {
-            let after_eq = stripped.trim_start();
-            if after_eq.starts_with('"')
-                && let Some(end) = after_eq[1..].find('"')
-            {
-                // +1 跳过起始引号
-                return Some(&after_eq[1..1 + end]);
-            }
+        // Expect '='
+        if !rest.starts_with('=') {
+            continue;
+        }
+        rest = rest[1..].trim_start();
+
+        // Expect quote
+        if rest.is_empty() {
+            break;
+        }
+        let quote = rest.chars().next().unwrap();
+        if quote != '"' && quote != '\'' {
+            continue;
+        }
+        rest = &rest[1..];
+
+        // Find matching quote
+        if let Some(val_end) = rest.find(quote) {
+            let val = &rest[..val_end];
+            attrs.insert(key.to_string(), val.to_string());
+            rest = &rest[val_end + 1..];
+        } else {
+            break; // Unclosed quote
         }
     }
-    None
+    attrs
+}
+
+fn parse_expr(input: &str) -> Expr {
+    // 1. Split by OR
+    let parts: Vec<&str> = input.split(" or ").collect();
+    if parts.len() > 1 {
+        let mut expr = parse_and_expr(parts[0]);
+        for part in &parts[1..] {
+            expr = Expr::Binary(Op::Or, Box::new(expr), Box::new(parse_and_expr(part)));
+        }
+        return expr;
+    }
+    parse_and_expr(input)
+}
+
+fn parse_and_expr(input: &str) -> Expr {
+    let parts: Vec<&str> = input.split(" and ").collect();
+    if parts.len() > 1 {
+        let mut expr = parse_atom(parts[0]);
+        for part in &parts[1..] {
+            expr = Expr::Binary(Op::And, Box::new(expr), Box::new(parse_atom(part)));
+        }
+        return expr;
+    }
+    parse_atom(input)
+}
+
+fn parse_atom(input: &str) -> Expr {
+    let input = input.trim();
+    // Check operators. Order matters (longest first).
+    let ops = [
+        ("!=", Op::Ne),
+        ("==", Op::Eq),
+        (">=", Op::Ge),
+        ("<=", Op::Le),
+        (">", Op::Gt),
+        ("<", Op::Lt),
+    ];
+
+    for (sym, op) in ops {
+        if let Some((left, right)) = input.split_once(sym) {
+            return Expr::Binary(op, Box::new(parse_val(left)), Box::new(parse_val(right)));
+        }
+    }
+
+    // Implicit boolean check
+    parse_val(input)
+}
+
+fn parse_val(input: &str) -> Expr {
+    let s = input.trim();
+    if s == "null" {
+        return Expr::Literal(Value::Null);
+    }
+    if s == "true" {
+        return Expr::Literal(Value::Bool(true));
+    }
+    if s == "false" {
+        return Expr::Literal(Value::Bool(false));
+    }
+    if (s.starts_with('\'') && s.ends_with('\'')) || (s.starts_with('"') && s.ends_with('"')) {
+        return Expr::Literal(Value::Str(s[1..s.len() - 1].to_string()));
+    }
+    if let Ok(n) = s.parse::<i64>() {
+        return Expr::Literal(Value::I64(n));
+    }
+    if let Ok(n) = s.parse::<f64>() {
+        return Expr::Literal(Value::F64(n));
+    }
+    // Variable
+    Expr::Var(s.to_string())
 }
 
 #[cfg(test)]
@@ -341,7 +457,13 @@ mod tests {
         assert_eq!(nodes.len(), 1);
         match &nodes[0] {
             AstNode::If { test, body } => {
-                assert_eq!(test, "a > 1");
+                match test {
+                    Expr::Binary(Op::Gt, left, right) => {
+                        assert_eq!(**left, Expr::Var("a".to_string()));
+                        assert_eq!(**right, Expr::Literal(Value::I64(1)));
+                    }
+                    _ => panic!("Expected Binary expression, got {:?}", test),
+                }
                 assert_eq!(body.len(), 1);
                 match &body[0] {
                     AstNode::Text(t) => assert_eq!(t, "content"),
@@ -379,7 +501,10 @@ mod tests {
         assert_eq!(nodes.len(), 1);
         match &nodes[0] {
             AstNode::If { test, body } => {
-                assert_eq!(test, "x");
+                match test {
+                    Expr::Var(v) => assert_eq!(v, "x"),
+                    _ => panic!("Expected Var"),
+                }
                 assert_eq!(body.len(), 1);
                 match &body[0] {
                     AstNode::Text(t) => assert_eq!(t, "content"),

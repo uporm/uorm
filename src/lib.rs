@@ -11,6 +11,7 @@ pub mod udbc;
 pub use ctor;
 pub use uorm_macros::mapper_assets;
 pub use uorm_macros::sql;
+pub use uorm_macros::transaction;
 
 #[macro_export]
 macro_rules! exec {

@@ -6,7 +6,10 @@ use crate::udbc::driver::Driver;
 use crate::udbc::value::Value;
 use std::sync::Arc;
 
-/// 映射器客户端，封装了连接池与模板调用
+/// Mapper client encapsulating connection pool and SQL template execution.
+///
+/// Acts as a higher-level abstraction over `Session`, handling SQL ID lookup
+/// and result mapping based on statement type.
 pub struct Mapper {
     pool: Arc<dyn Driver>,
 }
@@ -16,6 +19,8 @@ impl Mapper {
         Self { pool }
     }
 
+    /// Creates a new ephemeral session for this mapper.
+    /// Note: Sessions are cheap to create (Arc clone).
     fn session(&self) -> Session {
         Session::new(self.pool.clone())
     }
@@ -25,6 +30,13 @@ impl Mapper {
             .ok_or_else(|| DbError::Query(format!("SQL ID not found: {}", sql_id)))
     }
 
+    /// Executes a mapped SQL statement by ID.
+    ///
+    /// # Generic Parameters
+    /// * `R`: Return type. Must be deserializable from the query result.
+    ///   - For `Select`, `R` is typically `Vec<T>`.
+    ///   - For `Insert`/`Update`/`Delete`, `R` is typically `u64` (affected rows) or `i64`.
+    /// * `T`: Argument type. Must be serializable (passed to the template engine).
     pub async fn execute<R, T>(&self, sql_id: &str, args: &T) -> Result<R, DbError>
     where
         T: serde::Serialize,
@@ -40,25 +52,35 @@ impl Mapper {
         match stmt.r#type {
             StatementType::Select => {
                 let rows = self.session().query_raw(sql, args).await?;
+
+                // Performance Note:
+                // We convert Vec<HashMap> -> Value::List(Vec<Value::Map>) -> R.
+                // This intermediate step allocates. Optimizing this would require
+                // a custom Deserializer that accepts Vec<HashMap> directly,
+                // or changing the Session API to return R directly.
+                // Given the current architecture, this is the safe approach.
                 let value = Value::List(rows.into_iter().map(Value::Map).collect());
                 R::deserialize(ValueDeserializer { value: &value })
             }
             StatementType::Insert => {
                 let session = self.session();
                 let affected = session.execute(sql, args).await?;
-                if stmt.use_generated_keys {
-                    let id = session.last_insert_id().await?;
-                    let v = Value::I64(id as i64);
-                    R::deserialize(ValueDeserializer { value: &v })
+
+                let val = if stmt.use_generated_keys {
+                    session.last_insert_id().await? as i64
                 } else {
-                    let v = Value::I64(affected as i64);
-                    R::deserialize(ValueDeserializer { value: &v })
-                }
+                    affected as i64
+                };
+
+                R::deserialize(ValueDeserializer {
+                    value: &Value::I64(val),
+                })
             }
             StatementType::Update | StatementType::Delete | StatementType::Sql => {
                 let affected = self.session().execute(sql, args).await?;
-                let v = Value::I64(affected as i64);
-                R::deserialize(ValueDeserializer { value: &v })
+                R::deserialize(ValueDeserializer {
+                    value: &Value::I64(affected as i64),
+                })
             }
         }
     }

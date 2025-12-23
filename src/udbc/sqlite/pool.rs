@@ -95,7 +95,7 @@ impl SqliteDriver {
         // Enforce foreign keys for data integrity
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|e| DbError::Database(format!("Failed to set foreign_keys: {}", e)))?;
-        
+
         // WAL mode improves concurrency (readers don't block writers).
         // synchronous = NORMAL is safe for WAL and faster.
         // Note: Changing journal_mode requires a write lock on the database file.
@@ -121,11 +121,12 @@ impl Driver for SqliteDriver {
     }
 
     async fn acquire(&self) -> Result<Box<dyn Connection>, DbError> {
-        let target = self
-            .target
-            .as_ref()
-            .ok_or_else(|| DbError::Database("Driver not built (target missing). Call build() after new().".to_string()))?;
-        
+        let target = self.target.as_ref().ok_or_else(|| {
+            DbError::Database(
+                "Driver not built (target missing). Call build() after new().".to_string(),
+            )
+        })?;
+
         let target_clone = target.clone();
         let timeout_secs = self.options.as_ref().map(|o| o.timeout).unwrap_or(0);
 

@@ -22,16 +22,16 @@ impl<'a> Context<'a> {
     }
 
     pub fn lookup(&self, key: &str) -> &'a Value {
-        // 1. 尝试直接匹配（查找局部变量或根对象的直接属性）
+        // 1) Try an exact match (locals or a direct key on the root object).
         if let Some(v) = self.get_from_scope(key) {
             return v;
         }
 
-        // 2. 尝试嵌套查找（例如 "user.name"）
+        // 2) Try dotted-path lookup (e.g. "user.name").
         if let Some((head, rest)) = key.split_once('.') {
-            // 先找到第一级对象
+            // Resolve the first segment.
             if let Some(head_value) = self.get_from_scope(head) {
-                // 然后递归查找剩余路径
+                // Then resolve the remaining path.
                 if let Some(target) = Self::resolve_path(head_value, rest) {
                     return target;
                 }
@@ -42,12 +42,14 @@ impl<'a> Context<'a> {
     }
 
     fn get_from_scope(&self, key: &str) -> Option<&'a Value> {
-        // 1. 优先查找局部变量（栈结构，从后往前查以支持遮蔽）
+        // 1. Prioritize local variables (Stack structure, search backwards to support shadowing)
+        // Complexity: O(L) where L is the depth of nested loops/scopes.
+        // Since L is typically small (< 10), linear scan is faster than HashMap overhead.
         if let Some((_, v)) = self.locals.iter().rev().find(|(k, _)| k == key) {
             return Some(v);
         }
 
-        // 2. 查找根对象
+        // 2. Search root object
         if let Value::Map(m) = self.root {
             return m.get(key);
         }
@@ -55,7 +57,7 @@ impl<'a> Context<'a> {
         None
     }
 
-    /// 辅助函数：在 Value 中根据点号分隔的路径查找值
+    /// Resolve a dot-separated path within a `Value` (maps only).
     fn resolve_path(mut current: &'a Value, path: &str) -> Option<&'a Value> {
         for part in path.split('.') {
             match current {

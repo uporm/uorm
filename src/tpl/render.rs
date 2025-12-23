@@ -1,4 +1,4 @@
-use crate::tpl::ast::AstNode;
+use crate::tpl::ast::{AstNode, Expr, Op};
 use crate::tpl::cache::TEMPLATE_CACHE;
 use crate::tpl::render_context::Context;
 use crate::udbc::driver::Driver;
@@ -22,91 +22,58 @@ fn to_f64(v: &Value) -> Option<f64> {
     }
 }
 
-fn eval_atom(expr: &str, ctx: &Context) -> bool {
-    let expr = expr.trim();
-    if expr.is_empty() {
-        return false;
-    }
+fn is_truthy(v: &Value) -> bool {
+    !matches!(v, Value::Null | Value::Bool(false))
+}
 
-    // Split by operator (check longest operators first)
-    let (key, op, val_str) = if let Some((k, v)) = expr.split_once("!=") {
-        (k.trim(), "!=", v.trim())
-    } else if let Some((k, v)) = expr.split_once("==") {
-        (k.trim(), "==", v.trim())
-    } else if let Some((k, v)) = expr.split_once(">=") {
-        (k.trim(), ">=", v.trim())
-    } else if let Some((k, v)) = expr.split_once("<=") {
-        (k.trim(), "<=", v.trim())
-    } else if let Some((k, v)) = expr.split_once(">") {
-        (k.trim(), ">", v.trim())
-    } else if let Some((k, v)) = expr.split_once("<") {
-        (k.trim(), "<", v.trim())
-    } else {
-        let val = ctx.lookup(expr);
-        return !matches!(val, Value::Null | Value::Bool(false));
-    };
-
-    let left = ctx.lookup(key);
-
-    let right_owned;
-    let right = if val_str == "null" {
-        &Value::Null
-    } else if val_str == "true" {
-        &Value::Bool(true)
-    } else if val_str == "false" {
-        &Value::Bool(false)
-    } else if (val_str.starts_with('\'') && val_str.ends_with('\''))
-        || (val_str.starts_with('"') && val_str.ends_with('"'))
-    {
-        right_owned = Value::Str(val_str[1..val_str.len() - 1].to_string());
-        &right_owned
-    } else if let Ok(n) = val_str.parse::<i64>() {
-        right_owned = Value::I64(n);
-        &right_owned
-    } else if let Ok(n) = val_str.parse::<f64>() {
-        right_owned = Value::F64(n);
-        &right_owned
-    } else {
-        ctx.lookup(val_str)
-    };
-
-    match op {
-        "==" => {
-            if let (Some(l), Some(r)) = (to_f64(left), to_f64(right)) {
-                (l - r).abs() < f64::EPSILON
-            } else {
-                left == right
-            }
-        }
-        "!=" => {
-            if let (Some(l), Some(r)) = (to_f64(left), to_f64(right)) {
-                (l - r).abs() > f64::EPSILON
-            } else {
-                left != right
-            }
-        }
-        ">" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l > r),
-        ">=" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l >= r),
-        "<" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l < r),
-        "<=" => to_f64(left).zip(to_f64(right)).is_some_and(|(l, r)| l <= r),
-        _ => false,
+fn resolve_val(expr: &Expr, ctx: &Context) -> Value {
+    match expr {
+        Expr::Literal(v) => v.clone(),
+        Expr::Var(name) => ctx.lookup(name).clone(),
+        Expr::Binary(..) => Value::Bool(eval_expr(expr, ctx)),
     }
 }
 
-pub fn eval_expr(expr: &str, ctx: &Context) -> bool {
-    for or_part in expr.split(" or ") {
-        let mut and_satisfied = true;
-        for atom in or_part.split(" and ") {
-            if !eval_atom(atom, ctx) {
-                and_satisfied = false;
-                break;
+pub fn eval_expr(expr: &Expr, ctx: &Context) -> bool {
+    match expr {
+        Expr::Binary(op, left, right) => {
+            if *op == Op::And {
+                return eval_expr(left, ctx) && eval_expr(right, ctx);
+            }
+            if *op == Op::Or {
+                return eval_expr(left, ctx) || eval_expr(right, ctx);
+            }
+
+            let l_val = resolve_val(left, ctx);
+            let r_val = resolve_val(right, ctx);
+            let l_f64 = to_f64(&l_val);
+            let r_f64 = to_f64(&r_val);
+
+            match op {
+                Op::Eq => {
+                    if let (Some(l), Some(r)) = (l_f64, r_f64) {
+                        (l - r).abs() < f64::EPSILON
+                    } else {
+                        l_val == r_val
+                    }
+                }
+                Op::Ne => {
+                    if let (Some(l), Some(r)) = (l_f64, r_f64) {
+                        (l - r).abs() > f64::EPSILON
+                    } else {
+                        l_val != r_val
+                    }
+                }
+                Op::Gt => l_f64.zip(r_f64).is_some_and(|(l, r)| l > r),
+                Op::Ge => l_f64.zip(r_f64).is_some_and(|(l, r)| l >= r),
+                Op::Lt => l_f64.zip(r_f64).is_some_and(|(l, r)| l < r),
+                Op::Le => l_f64.zip(r_f64).is_some_and(|(l, r)| l <= r),
+                _ => false,
             }
         }
-        if and_satisfied {
-            return true;
-        }
+        Expr::Literal(v) => is_truthy(v),
+        Expr::Var(name) => is_truthy(ctx.lookup(name)),
     }
-    false
 }
 
 pub(crate) fn render(nodes: &[AstNode], ctx: &mut Context, buf: &mut RenderBuffer) {
@@ -168,43 +135,31 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
-    fn test_eval_atom_literals() {
-        let root = Value::Map(HashMap::new());
-        let ctx = Context::new(&root);
-
-        assert!(!eval_atom("var", &ctx));
-
+    fn test_eval_expr_logic() {
         let mut map = HashMap::new();
         map.insert("a".to_string(), Value::I64(10));
-        map.insert("b".to_string(), Value::Str("hello".to_string()));
-        map.insert("c".to_string(), Value::Bool(true));
+        map.insert("b".to_string(), Value::Bool(true));
         let root = Value::Map(map);
         let ctx = Context::new(&root);
 
-        assert!(eval_atom("a == 10", &ctx));
-        assert!(eval_atom("a != 5", &ctx));
-        assert!(eval_atom("b == 'hello'", &ctx));
-        assert!(eval_atom("b != 'world'", &ctx));
-        assert!(eval_atom("c", &ctx));
-        assert!(eval_atom("c == true", &ctx));
+        // a == 10
+        let expr = Expr::Binary(
+            Op::Eq,
+            Box::new(Expr::Var("a".to_string())),
+            Box::new(Expr::Literal(Value::I64(10))),
+        );
+        assert!(eval_expr(&expr, &ctx));
 
-        // New comparisons
-        assert!(eval_atom("a > 5", &ctx));
-        assert!(eval_atom("a >= 10", &ctx));
-        assert!(eval_atom("a < 20", &ctx));
-        assert!(eval_atom("a <= 10", &ctx));
-    }
+        // a > 5
+        let expr = Expr::Binary(
+            Op::Gt,
+            Box::new(Expr::Var("a".to_string())),
+            Box::new(Expr::Literal(Value::I64(5))),
+        );
+        assert!(eval_expr(&expr, &ctx));
 
-    #[test]
-    fn test_eval_expr() {
-        let mut map = HashMap::new();
-        map.insert("x".to_string(), Value::I64(1));
-        map.insert("y".to_string(), Value::I64(2));
-        let root = Value::Map(map);
-        let ctx = Context::new(&root);
-
-        assert!(eval_expr("x == 1 and y == 2", &ctx));
-        assert!(eval_expr("x == 1 or y == 3", &ctx));
-        assert!(!eval_expr("x == 2 or y == 3", &ctx));
+        // b
+        let expr = Expr::Var("b".to_string());
+        assert!(eval_expr(&expr, &ctx));
     }
 }

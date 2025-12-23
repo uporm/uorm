@@ -3,22 +3,29 @@ use crate::tpl::render::RenderBuffer;
 use crate::tpl::render_context::Context;
 use crate::tpl::{cache, render};
 use crate::udbc::driver::Driver;
-use crate::udbc::serializer::{ValueSerializer};
+use crate::udbc::serializer::ValueSerializer;
 use crate::udbc::value::Value;
 
-/// 渲染模板，返回 SQL 和参数
+/// Renders a SQL template by substituting parameters and returning the generated SQL 
+/// along with the bound parameter values.
+///
+/// This function handles:
+/// 1. Parsing the template (with caching for performance)
+/// 2. Serializing parameters into a format compatible with the database driver
+/// 3. Rendering the template into a final SQL string and a list of positional parameters
 pub fn render_template<T: serde::Serialize>(
     template_name: &str,
     template_content: &str,
     param: &T,
     driver: &dyn Driver,
 ) -> Result<(String, Vec<(String, Value)>), DbError> {
-    // 获取 AST（缓存）
+    // Retrieve the abstract syntax tree (AST) for the template, using a cache to avoid re-parsing.
     let ast = cache::get_ast(template_name, template_content);
 
-    // 序列化参数为 Value
+    // Convert the provided parameters into a generic Value type for SQL execution.
     let value = param.serialize(ValueSerializer)?;
-    // 创建渲染上下文
+    
+    // Initialize the render buffer with estimated capacity to minimize reallocations.
     let mut buf = RenderBuffer {
         sql: String::with_capacity(template_content.len()),
         params: Vec::with_capacity(10),
@@ -26,6 +33,7 @@ pub fn render_template<T: serde::Serialize>(
         param_count: 0,
     };
 
+    // Set up the rendering context and execute the rendering process.
     let mut ctx = Context::new(&value);
     render::render(&ast, &mut ctx, &mut buf);
 

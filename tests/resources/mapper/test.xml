@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
-<mapper namespace="test_ns">
-    <select id="selectUser">
-        SELECT * FROM users
-    </select>
-</mapper>

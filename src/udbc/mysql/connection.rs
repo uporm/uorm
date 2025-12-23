@@ -42,18 +42,16 @@ impl Connection for MysqlConnection {
     ) -> Result<Vec<HashMap<String, Value>>, DbError> {
         // Map args to positional params. Note: We ignore keys in args as mysql_async
         // expects Positional params for '?' placeholders.
-        let params = mysql_async::Params::Positional(
-            args.iter().map(|(_, v)| to_mysql_value(v)).collect(),
-        );
+        let params =
+            mysql_async::Params::Positional(args.iter().map(|(_, v)| to_mysql_value(v)).collect());
 
         let rows: Vec<MyRow> = self.conn.exec(sql, params).await?;
         Ok(rows.into_iter().map(Self::map_row).collect())
     }
 
     async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64, DbError> {
-        let params = mysql_async::Params::Positional(
-            args.iter().map(|(_, v)| to_mysql_value(v)).collect(),
-        );
+        let params =
+            mysql_async::Params::Positional(args.iter().map(|(_, v)| to_mysql_value(v)).collect());
 
         self.conn.exec_drop(sql, params).await?;
         Ok(self.conn.affected_rows())

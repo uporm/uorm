@@ -1,3 +1,24 @@
+use crate::udbc::value::Value;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Op {
+    Eq,
+    Ne,
+    Gt,
+    Ge,
+    Lt,
+    Le,
+    And,
+    Or,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Literal(Value),
+    Var(String),
+    Binary(Op, Box<Expr>, Box<Expr>),
+}
+
 #[derive(Debug, Clone)]
 pub enum AstNode {
     Text(String),
@@ -6,7 +27,7 @@ pub enum AstNode {
         refid: String,
     },
     If {
-        test: String,
+        test: Expr,
         body: Vec<AstNode>,
     },
     Foreach {

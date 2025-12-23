@@ -1,24 +1,41 @@
 use thiserror::Error;
 
-/// Represents errors that can occur in the RDBC module.
+/// Represents all possible errors that can occur within the `uorm` crate.
 #[derive(Error, Debug)]
 pub enum DbError {
+    /// A generic error with a custom message.
     #[error("{0}")]
     General(String),
+    
+    /// An error originating from an underlying database driver.
     #[error("Driver error: {0}")]
     Driver(#[source] Box<dyn std::error::Error + Send + Sync>),
+    
+    /// An error related to database connection management (e.g., failed to acquire from pool).
     #[error("Connection error: {0}")]
     Connection(String),
+    
+    /// An error that occurred during the execution of a SQL query.
     #[error("Query error: {0}")]
     Query(String),
+    
+    /// An error related to value conversion or serialization/deserialization.
     #[error("Value error: {0}")]
     Value(String),
+    
+    /// Error indicating that a requested feature or method is not yet implemented.
     #[error("Not implemented")]
     NotImplemented,
+    
+    /// Error indicating that the provided database type is not supported by the current configuration.
     #[error("Unsupported database type: {0}")]
     UnsupportedDatabaseType(String),
+    
+    /// Error indicating that the database connection URL is malformed or invalid.
     #[error("Invalid database URL: {0}")]
     InvalidDatabaseUrl(String),
+    
+    /// A high-level database error, typically wrapping driver-specific errors.
     #[error("Database error: {0}")]
     Database(String),
 }

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
+<mapper namespace="user_multi">
+
+  <!-- Example 1: Different database implementations using databaseType attribute -->
+  <!-- uorm will match the one with matching databaseType, or fall back to the one without databaseType -->
+
+  <!-- Default implementation (fallback) -->
+  <select id="get_user_count">
+    SELECT count(*) FROM users
+  </select>
+
+  <!-- MySQL specific implementation (if needed, though count is same) -->
+  <select id="get_user_count" databaseType="mysql">
+    SELECT count(id) FROM users
+  </select>
+
+  <!-- Example 2: Pagination (Syntax varies between DBs) -->
+  <!-- MySQL uses LIMIT offset, limit -->
+  <select id="get_paged_users" databaseType="mysql">
+    SELECT id, name FROM users
+    ORDER BY id
+    LIMIT #{offset}, #{limit}
+  </select>
+
+  <!-- SQLite uses LIMIT limit OFFSET offset -->
+  <select id="get_paged_users" databaseType="sqlite">
+    SELECT id, name FROM users
+    ORDER BY id
+    LIMIT #{limit} OFFSET #{offset}
+  </select>
+
+  <!-- Example 3: Date/Time functions -->
+  <select id="get_recent_users" databaseType="mysql">
+    SELECT * FROM users
+    WHERE create_time > DATE_SUB(NOW(), INTERVAL 7 DAY)
+  </select>
+
+  <select id="get_recent_users" databaseType="sqlite">
+    SELECT * FROM users
+    WHERE create_time > datetime('now', '-7 days')
+  </select>
+
+  <!-- Example 4: UPSERT (Insert or Update) -->
+  <insert id="upsert_user" databaseType="mysql">
+    INSERT INTO users (id, name) VALUES (#{id}, #{name})
+    ON DUPLICATE KEY UPDATE name = #{name}
+  </insert>
+
+  <insert id="upsert_user" databaseType="sqlite">
+    INSERT INTO users (id, name) VALUES (#{id}, #{name})
+    ON CONFLICT(id) DO UPDATE SET name = #{name}
+  </insert>
+
+</mapper>

@@ -11,7 +11,7 @@ pub struct CachedTemplate {
     pub content_hash: u64,
 }
 
-/// 缓存模板 AST
+/// Cache for parsed template ASTs.
 pub(crate) static TEMPLATE_CACHE: LazyLock<DashMap<String, CachedTemplate>> =
     LazyLock::new(DashMap::new);
 

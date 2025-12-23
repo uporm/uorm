@@ -72,7 +72,7 @@ impl Connection for SqliteConnection {
         self.run_blocking(move |conn| {
             let mut stmt = conn.prepare(&sql)?;
             let column_count = stmt.column_count();
-            
+
             // pre-allocate column names to avoid repeated lookups
             let column_names: Vec<String> = (0..column_count)
                 .map(|i| {
@@ -145,4 +145,3 @@ impl Connection for SqliteConnection {
         .await
     }
 }
-

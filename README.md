@@ -5,47 +5,18 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/uporm/uorm/actions/workflows/ci.yml/badge.svg)](https://github.com/uporm/uorm/actions)
 
-Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 SQL 与业务逻辑分离：用 XML 管理 SQL，通过 `sql_id` 调用并把结果自动反序列化到 Rust 类型；同时支持直接执行原生 SQL，兼容 `async/await`。
+Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 SQL 与业务逻辑分离：用 XML 管理 SQL，通过 `sql_id` 调用并把结果自动反序列化到 Rust 类型；同时支持直接执行原生 SQL，原生支持 `async/await`。
 
 ## 特性
 
-- 🚀 **MyBatis 风格**：熟悉的 XML Mapper 语法，`namespace.id` 作为 SQL 标识
-- 📦 **类型安全**：利用 Rust 强大的类型系统，编译时检查 SQL 参数和结果类型
-- ⚡ **异步优先**：原生支持 `async/await`，基于 `tokio` 运行时
-- 🔧 **灵活配置**：支持多数据源、连接池、事务管理
-- 🎯 **动态 SQL**：支持 `<if>`、`<foreach>` 等动态 SQL 标签
-- 🛠️ **过程宏**：编译期内嵌 XML、自动生成 DAO 方法
-- 🗄️ **多数据库**：支持 SQLite、MySQL，易于扩展其他数据库
-- 📝 **详细日志**：集成 `log` crate，便于调试和监控
-
-## 目录
-
-- [快速开始](#快速开始sqlite--xml-mapper)
-- [功能概览](#功能概览)
-- [安装](#安装)
-- [直接执行 SQL](#直接执行-sqlsession)
-- [事务](#事务)
-- [SQL 属性宏](#sql-属性宏sql)
-- [XML Mapper 格式](#xml-mapper-格式)
-- [支持的数据库](#支持的数据库)
-- [高级功能](#高级功能)
-- [配置选项](#配置选项)
-- [开发与测试](#开发与测试)
-- [贡献指南](#贡献指南)
-- [常见问题](#常见问题)
-- [社区](#社区)
-- [License](#license)
-
-## 功能概览
-
-- MyBatis 风格 XML Mapper：`namespace.id` 作为 SQL 唯一标识
-- 原生 SQL 模板渲染：`#{field}` 绑定参数，支持 `<if>` / `<foreach>`
-- `Session`：执行任意 SQL（`execute`/`query`/`last_insert_id`）
-- `Mapper`：按 `sql_id` 调用 XML 中的 `select/insert/update/delete`
-- 多数据源：通过 `DriverManager` 注册多个库（按 `db_name` 区分）
-- 过程宏：
-  - `mapper_assets![...]`：编译期内嵌 XML 并在启动时自动加载
-  - `sql`：统一属性宏，用于定义 Namespace (`#[sql("name")]`) 和绑定 SQL 方法 (`#[sql("id")]`)
+- 🚀 **MyBatis 风格**：支持熟悉的 XML Mapper 语法，通过 `namespace.id` 唯一定位 SQL。
+- 🎯 **动态 SQL**：支持 `<if>`、`<foreach>`、`<trim>`、`<where>`、`<set>` 等标签，轻松构建复杂 SQL。
+- 📦 **类型安全**：利用 Rust 强大的类型系统，通过 `serde` 自动处理参数绑定和结果反序列化。
+- ⚡ **异步优先**：基于 `tokio` 运行时，全程支持 `async/await`，适配高并发场景。
+- 🔧 **灵活配置**：支持多数据源管理、连接池优化、超时设置及事务控制。
+- 🛠️ **过程宏增强**：提供 `#[sql]`、`#[transaction]` 及 `mapper_assets!` 等宏，极大简化开发工作。
+- 🗄️ **多数据库支持**：原生支持 SQLite 和 MySQL，架构易于扩展至其他 UDBC 驱动。
+- 📝 **详细日志**：集成 `log` crate，提供 SQL 执行、耗时及参数详情，便于调试。
 
 ## 安装
 
@@ -53,24 +24,25 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.2.0"
-serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
+uorm = "0.3.0"
 ```
 
-数据库特性开关：
+### 特性开关 (Features)
 
-- SQLite（默认开启）：无需额外配置
-- MySQL：启用 `mysql` feature
+- `sqlite`（默认开启）：支持 SQLite 数据库。
+- `mysql`：支持 MySQL 数据库。
 
 ```toml
 [dependencies]
-uorm = { version = "0.2.0", default-features = false, features = ["mysql"] }
+# 仅启用 MySQL 支持
+uorm = { version = "0.3.0", default-features = false, features = ["mysql"] }
 ```
 
-## 快速开始（SQLite + XML Mapper）
+## 快速开始
 
 ### 1) 注册数据库驱动
+
+通过 `UORM` 全局单例注册驱动。
 
 ```rust
 use uorm::driver_manager::UORM;
@@ -78,9 +50,11 @@ use uorm::udbc::sqlite::pool::SqliteDriver;
 
 #[tokio::main]
 async fn main() -> Result<(), uorm::error::DbError> {
+    // 创建驱动并指定名称（默认为 "default"）
     let driver = SqliteDriver::new("sqlite::memory:")
-        .name("default".to_string())
         .build()?;
+    
+    // 注册到全局管理器
     UORM.register(driver)?;
 
     Ok(())
@@ -89,26 +63,31 @@ async fn main() -> Result<(), uorm::error::DbError> {
 
 ### 2) 加载 Mapper XML
 
-运行时从文件加载：
+`uorm` 提供两种方式加载 XML 资源：
+
+**方式一：编译期内嵌（推荐）**
+使用 `mapper_assets!` 宏，在编译时将 XML 文件内容嵌入二进制中，程序启动时自动注册。
+
+```rust
+use uorm::mapper_assets;
+
+// 自动扫描路径下的所有 XML 文件
+mapper_assets!["src/resources/**/*.xml"];
+```
+
+**方式二：运行时加载**
+在程序启动后手动扫描文件系统。
 
 ```rust
 use uorm::driver_manager::UORM;
 
-fn load_mapper_xml() -> Result<(), uorm::error::DbError> {
+fn init_mappers() -> Result<(), uorm::error::DbError> {
     UORM.assets("src/resources/**/*.xml")?;
     Ok(())
 }
 ```
 
-或编译期内嵌并在启动时自动加载（适合二进制发布）：
-
-```rust
-use uorm::mapper_assets;
-
-mapper_assets!["src/resources/**/*.xml"];
-```
-
-### 3) 调用 Mapper
+### 3) 执行 Mapper 调用
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -126,69 +105,18 @@ struct IdArg {
     id: i64,
 }
 
-pub async fn get_user() -> Result<User, uorm::error::DbError> {
-    let mapper = UORM.mapper("default").unwrap();
-    mapper.get("user.get_by_id", &IdArg { id: 1 }).await
+pub async fn get_user_by_id(user_id: i64) -> Result<User, uorm::error::DbError> {
+    let mapper = UORM.mapper().expect("Driver not found");
+    
+    // execute 会根据 XML 定义的标签（select/insert/update/delete）自动执行。
+    // 对于 select，如果结果只有一行且返回类型是结构体而非 Vec，会自动解包。
+    mapper.execute("user.get_by_id", &IdArg { id: user_id }).await
 }
 ```
 
-## 直接执行 SQL（Session）
+## SQL 过程宏 (`#[sql]`)
 
-```rust
-use serde::Serialize;
-use uorm::driver_manager::UORM;
-
-#[derive(Serialize)]
-struct NewUser<'a> {
-    name: &'a str,
-    age: i64,
-}
-
-pub async fn create_user() -> Result<i64, uorm::error::DbError> {
-    let session = UORM.session("default").unwrap();
-
-    session
-        .execute(
-            "INSERT INTO users(name, age) VALUES (#{name}, #{age})",
-            &NewUser { name: "alice", age: 18 },
-        )
-        .await?;
-
-    Ok(session.last_insert_id().await? as i64)
-}
-```
-
-## 事务
-
-```rust
-use serde::Serialize;
-use uorm::driver_manager::UORM;
-
-#[derive(Serialize)]
-struct NewUser<'a> {
-    name: &'a str,
-    age: i64,
-}
-
-pub async fn create_in_tx() -> Result<i64, uorm::error::DbError> {
-    let session = UORM.session("default").unwrap();
-
-    let mut tx = session.begin().await?;
-    tx.execute(
-        "INSERT INTO users(name, age) VALUES (#{name}, #{age})",
-        &NewUser { name: "bob", age: 20 },
-    )
-    .await?;
-
-    let id = tx.last_insert_id().await? as i64;
-    tx.commit().await?;
-    Ok(id)
-}
-```
-
-## SQL 属性宏（sql）
-
-把 `namespace/id/db_name` 绑定到方法上，方法体里用 `exec!()` 执行对应 `sql_id`：
+使用 `#[sql]` 宏可以像定义 DAO 接口一样操作数据库，代码更加优雅。
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -198,237 +126,172 @@ use uorm::{exec, sql};
 struct User {
     id: i64,
     name: String,
-    age: i64,
 }
 
-#[sql("user")]
+#[sql("user")] // 指定 XML 的 namespace
 struct UserDao;
 
 impl UserDao {
-    #[sql("get_by_id")]
+    #[sql("get_by_id")] // 对应 user.get_by_id
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
-        exec!()
+        // exec!() 会由宏自动展开为 Mapper 调用逻辑
+        exec!() 
     }
 
-    #[sql("list_all")]
-    pub async fn list_all(args: ()) -> Result<Vec<User>, uorm::error::DbError> {
-        exec!()
-    }
-
-    #[sql("insert_user")]
-    pub async fn insert(user: User) -> Result<i64, uorm::error::DbError> {
-        exec!()
-    }
-
-    #[sql("update_age")]
-    pub async fn update_age(id: i64, age: i64) -> Result<u64, uorm::error::DbError> {
+    #[sql(id = "list_all", database = "other_db")] // 可指定特定的数据库名称
+    pub async fn list_all() -> Result<Vec<User>, uorm::error::DbError> {
         exec!()
     }
 }
 ```
 
-说明：
+## 直接执行 SQL (`Session`)
 
-- `exec!()` 只能在 `sql` 属性宏标注的方法体内使用（宏会注入运行时调用逻辑）
-- `#[sql("name")]` 在结构体上定义 Namespace
-- `#[sql("id")]` 在方法上绑定 SQL ID，支持 `database` 参数：`#[sql(id="...", database="...")]`
+如果不想使用 XML，也可以通过 `Session` 直接执行带有命名参数的 SQL。
 
-## XML Mapper 格式
+```rust
+use serde::Serialize;
+use uorm::driver_manager::UORM;
 
-`sql_id` 由 `namespace.id` 组成，例如：`user.get_by_id`。
+#[derive(Serialize)]
+struct UserParam<'a> {
+    name: &'a str,
+    age: i32,
+}
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
+pub async fn add_user() -> Result<u64, uorm::error::DbError> {
+    let session = UORM.session().expect("Default driver not found");
+
+    // 支持 #{field} 语法绑定参数
+    let affected = session.execute(
+        "INSERT INTO users(name, age) VALUES (#{name}, #{age})",
+        &UserParam { name: "Alice", age: 18 }
+    ).await?;
+
+    Ok(affected)
+}
+```
+
+## 事务管理
+
+### 自动事务宏 (`#[transaction]`)
+
+使用 `#[transaction]` 宏可以极大地简化事务代码。如果函数返回 `Err`，事务会自动回滚。
+
+```rust
+use uorm::executor::session::Session;
+use uorm::error::DbError;
+
+#[uorm::transaction]
+async fn transfer_data(session: &Session, data: MyData) -> Result<(), DbError> {
+    // 宏会自动注入 session.begin() / commit() / rollback()
+    
+    session.execute("INSERT ...", &data).await?;
+    session.execute("UPDATE ...", &data).await?;
+    
+    Ok(())
+}
+
+// 如果参数名不是 session，可以显式指定：
+#[uorm::transaction("s")]
+async fn custom_session_name(s: &Session) -> Result<(), DbError> {
+    Ok(())
+}
+```
+
+### 手动管理事务
+
+```rust
+async fn manual_transaction() -> Result<(), uorm::error::DbError> {
+    let session = UORM.session().expect("Default driver not found");
+    session.begin().await?;
+
+    match do_work(&session).await {
+        Ok(_) => session.commit().await?,
+        Err(e) => {
+            session.rollback().await?;
+            return Err(e);
+        }
+    }
+    Ok(())
+}
+```
+
+## XML Mapper 示例
+
+```mapper
 <mapper namespace="user">
+  <!-- 基本查询 -->
   <select id="get_by_id">
     SELECT id, name, age FROM users WHERE id = #{id}
   </select>
 
-  <insert id="insert_user" useGeneratedKeys="true" keyColumn="id">
-    INSERT INTO users(name, age) VALUES (#{name}, #{age})
-  </insert>
+  <!-- 动态 SQL：if 标签 -->
+  <select id="search">
+    SELECT * FROM users
+    <where>
+      <if test="name != null">
+        AND name LIKE #{name}
+      </if>
+      <if test="min_age != null">
+        AND age >= #{min_age}
+      </if>
+    </where>
+  </select>
 
+  <!-- 动态 SQL：foreach 标签 -->
   <select id="list_by_ids">
-    SELECT id, name, age FROM users
+    SELECT * FROM users
     WHERE id IN
     <foreach item="id" collection="ids" open="(" separator="," close=")">
       #{id}
     </foreach>
   </select>
 
-  <select id="list_by_min_age">
-    SELECT id, name, age FROM users WHERE 1=1
-    <if test="age != null">
-      AND age &gt;= #{age}
-    </if>
-  </select>
+  <!-- 插入并获取自增 ID -->
+  <insert id="insert_user" useGeneratedKeys="true" keyColumn="id">
+    INSERT INTO users(name, age) VALUES (#{name}, #{age})
+  </insert>
 </mapper>
 ```
 
-多数据库类型选择：
+## 高级配置
 
-- 通过 SQL 节点的 `databaseType="mysql|sqlite|..."` 指定适配的数据库
-- 同一 `id` 可定义多个版本；当找不到匹配的 `databaseType` 时会回退到未指定 `databaseType` 的版本
-
-## 支持的数据库
-
-- SQLite：`uorm::udbc::sqlite::pool::SqliteDriver`（默认 feature）
-- MySQL：`uorm::udbc::mysql::pool::MysqlDriver`（需要 `mysql` feature）
-
-## 开发与测试
-
-```bash
-cargo test
-```
-
-## 高级功能
-
-### 动态 SQL 构建
-
-uorm 支持 MyBatis 风格的动态 SQL 标签：
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
-<mapper namespace="example">
-  <select id="search_users">
-    SELECT * FROM users WHERE 1=1
-    <if test="name != null and name != ''">
-      AND name LIKE CONCAT('%', #{name}, '%')
-    </if>
-    <if test="min_age != null">
-      AND age >= #{min_age}
-    </if>
-    <if test="max_age != null">
-      AND age &lt;= #{max_age}
-    </if>
-    <if test="ids != null and ids.size() > 0">
-      AND id IN
-      <foreach item="id" collection="ids" open="(" separator="," close=")">
-        #{id}
-      </foreach>
-    </if>
-    ORDER BY id
-  </select>
-</mapper>
-```
-
-### 多数据库支持
-
-同一 SQL 可以针对不同数据库进行优化：
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
-<mapper namespace="user">
-  <select id="get_user" databaseType="mysql">
-    SELECT * FROM users WHERE id = #{id} LIMIT 1
-  </select>
-
-  <select id="get_user" databaseType="sqlite">
-    SELECT * FROM users WHERE id = #{id} LIMIT 1
-  </select>
-</mapper>
-```
-
-### 连接池配置
+### 连接池与超时
 
 ```rust
-use uorm::udbc::sqlite::pool::SqliteDriver;
+fn configure_driver() -> Result<(), uorm::error::DbError> {
+    let options = ConnectionOptions {
+        max_open_conns: 20,
+        max_idle_conns: 5,
+        max_lifetime: 3600,
+        timeout: 5, // 连接获取超时（秒）
+    };
 
-fn configure_pool() -> Result<(), uorm::error::DbError> {
-    let driver = SqliteDriver::new("sqlite::memory:")
-        .name("default".to_string())
-        .max_connections(10)  // 最大连接数
-        .min_connections(2)   // 最小连接数
-        .connection_timeout(std::time::Duration::from_secs(30))
-        .idle_timeout(std::time::Duration::from_secs(300))
+    let driver = MysqlDriver::new("mysql://user:pass@localhost/db")
+        .options(options)
         .build()?;
     
     Ok(())
 }
 ```
 
-## 配置选项
+### SQLite 特殊说明
 
-### 日志配置
+- **内存数据库**：使用 `sqlite::memory:` 会为每个 `acquire()` 调用创建全新的内存数据库。若需在连接间共享内存数据库，请参考 SQLite 的 `cache=shared` 配置。
+- **并发性**：SQLite 驱动默认开启了 `WAL` 模式和 `foreign_keys` 支持。
 
-uorm 使用 `log` crate 进行日志记录。启用调试日志：
+## 日志监控
+
+`uorm` 使用 `log` crate 输出调试信息。建议在开发环境下开启 `debug` 级别：
 
 ```rust
-use env_logger;
-
-fn main() {
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Debug)
-        .init();
-    
-    // ... 其他代码
+fn init_logging() {
+    // 输出示例:
+    // DEBUG [uorm] query: sql=SELECT ... WHERE id = ?, params=[I64(1)], elapsed=2ms, rows=1
+    env_logger::Builder::new().filter_level(log::LevelFilter::Debug).init();
 }
 ```
-
-### 性能优化
-
-1. **使用编译期内嵌 XML**：对于生产环境，使用 `mapper_assets!` 宏将 XML 编译到二进制中，避免运行时文件 IO。
-2. **合理使用连接池**：根据应用负载调整连接池大小。
-3. **批量操作**：对于大量数据操作，考虑使用事务或批量插入。
-
-
-
-## 贡献指南
-
-欢迎贡献！请遵循以下步骤：
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 打开 Pull Request
-
-### 开发环境设置
-
-```bash
-# 克隆项目
-git clone https://github.com/uporm/uorm.git
-cd uorm
-
-# 运行测试
-cargo test --all-features
-
-# 运行特定测试
-cargo test --test demo_session_test
-
-# 构建文档
-cargo doc --open
-```
-
-### 代码风格
-
-- 遵循 Rust 官方代码风格
-- 使用 `rustfmt` 格式化代码
-- 使用 `clippy` 进行代码检查
-
-## 常见问题
-
-### Q: 如何处理数据库迁移？
-A: uorm 专注于数据访问层，建议使用专门的迁移工具如 `diesel` 或 `sqlx` 进行数据库迁移。
-
-### Q: 是否支持 PostgreSQL？
-A: 目前支持 SQLite 和 MySQL，PostgreSQL 支持正在开发中。
-
-### Q: 如何监控性能？
-A: 可以通过启用调试日志来监控 SQL 执行时间，或集成第三方监控工具。
-
-### Q: 是否支持异步流？
-A: 目前不支持异步流，但可以通过分页查询处理大量数据。
-
-## 社区
-
-- **GitHub**: [https://github.com/uporm/uorm](https://github.com/uporm/uorm)
-- **问题追踪**: [GitHub Issues](https://github.com/uporm/uorm/issues)
-- **讨论区**: [GitHub Discussions](https://github.com/uporm/uorm/discussions)
-
 
 ## License
 
