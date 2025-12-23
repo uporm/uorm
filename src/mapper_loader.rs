@@ -122,9 +122,19 @@ fn parse_and_register(xml_content: &str, source: &str) -> Result<()> {
     let (namespace, items) = parse_xml(xml_content, source)?;
 
     let store = STATEMENTS.get_or_init(DashMap::new);
-    let ns_map = store.entry(namespace).or_default();
+    let ns_map = store.entry(namespace.clone()).or_default();
 
     for statement in items {
+        // Register in template cache for <include> tags.
+        if let Some(content) = &statement.content {
+            let full_id = format!("{}.{}", namespace, statement.id);
+            crate::tpl::cache::get_ast(&full_id, content);
+            // Also register with short id for local includes
+            if !crate::tpl::cache::TEMPLATE_CACHE.contains_key(&statement.id) {
+                crate::tpl::cache::get_ast(&statement.id, content);
+            }
+        }
+
         let mut statements = ns_map.entry(statement.id.clone()).or_default();
 
         // Reject duplicate definitions.
@@ -213,7 +223,12 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                     let content_end = end_pos - (tag_len + 3);
 
                     let content = if content_end > start_pos {
-                        Some(xml[start_pos..content_end].to_string())
+                        let raw_content = &xml[start_pos..content_end];
+                        // Unescape XML entities like &lt;, &gt;, &amp;, etc.
+                        // The template parser expects raw characters.
+                        quick_xml::escape::unescape(raw_content)
+                            .map(|s| s.into_owned())
+                            .ok()
                     } else {
                         None
                     };

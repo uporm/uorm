@@ -4,7 +4,7 @@ pub mod executor;
 #[doc(hidden)]
 pub mod mapper_loader;
 pub(crate) mod tpl;
-pub mod transaction;
+pub(crate) mod transaction;
 pub mod udbc;
 
 #[doc(hidden)]

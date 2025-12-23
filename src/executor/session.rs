@@ -1,14 +1,11 @@
 use crate::error::DbError;
-use crate::tpl::engine;
+use crate::executor::exec::{execute_conn, map_rows, query_conn};
 use crate::transaction::TransactionContext;
-use crate::udbc::deserializer::RowDeserializer;
 use crate::udbc::driver::Driver;
 use crate::udbc::value::Value;
-use log::debug;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::sync::Mutex;
 
 type TransactionContextMap = HashMap<String, Arc<Mutex<TransactionContext>>>;
@@ -115,32 +112,22 @@ impl Session {
     where
         T: serde::Serialize,
     {
-        let start = Instant::now();
-        let result = self.execute_impl(sql, args).await;
-        self.log_cmd("execute", sql, start.elapsed().as_millis(), &result);
-        result
-    }
-
-    async fn execute_impl<T>(&self, sql: &str, args: &T) -> Result<u64, DbError>
-    where
-        T: serde::Serialize,
-    {
         let key = self.pool.name().to_string();
         // Check if there's an active transaction for this driver.
         if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(&key).cloned()) {
             let mut ctx = tx.lock().await;
-            return ctx.execute(sql, args).await;
+            if let Some(conn) = ctx.connection_mut() {
+                return execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
+            } else {
+                return Err(DbError::Database("Transaction connection closed".to_string()));
+            }
         }
 
         // No active transaction, render template and execute on a new connection.
-        let (rendered_sql, params) = engine::render_template(sql, sql, args, self.pool.as_ref())?;
-
-        debug!("Execute (Conn): sql={}, params={:?}", rendered_sql, params);
-
         let mut conn = self.pool.acquire().await?;
-        conn.execute(&rendered_sql, &params).await
+        execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await
     }
-
+    
     /// Executes a SQL query and maps the resulting rows to a collection of type `R`.
     ///
     /// # Arguments
@@ -155,7 +142,7 @@ impl Session {
         R: serde::de::DeserializeOwned,
     {
         let rows = self.query_raw(sql, args).await?;
-        Self::map_rows(rows)
+        map_rows(rows)
     }
 
     /// Executes a SQL query and returns the results as a list of raw HashMaps.
@@ -169,60 +156,18 @@ impl Session {
     where
         T: serde::Serialize,
     {
-        let start = Instant::now();
-        let result = self.query_raw_impl(sql, args).await;
-
-        // Log query performance and row count.
-        let elapsed = start.elapsed().as_millis();
-        match &result {
-            Ok(rows) => debug!(
-                "query: sql={}, elapsed={}ms, rows={}",
-                sql,
-                elapsed,
-                rows.len()
-            ),
-            Err(e) => debug!("query: sql={}, elapsed={}ms, error={:?}", sql, elapsed, e),
-        }
-
-        result
-    }
-
-    async fn query_raw_impl<T>(
-        &self,
-        sql: &str,
-        args: &T,
-    ) -> Result<Vec<HashMap<String, Value>>, DbError>
-    where
-        T: serde::Serialize,
-    {
         let key = self.pool.name().to_string();
         if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(&key).cloned()) {
             let mut ctx = tx.lock().await;
-            return ctx.query(sql, args).await;
+            if let Some(conn) = ctx.connection_mut() {
+                return query_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
+            } else {
+                return Err(DbError::Database("Transaction connection closed".to_string()));
+            }
         }
 
-        let (rendered_sql, params) = engine::render_template(sql, sql, args, self.pool.as_ref())?;
-
-        debug!("Query (Conn): sql={}, params={:?}", rendered_sql, params);
-
         let mut conn = self.pool.acquire().await?;
-        conn.query(&rendered_sql, &params).await
-    }
-
-    /// Maps raw database rows to the target type `R`.
-    ///
-    /// Performance Note: Iterates and deserializes each row individually.
-    /// This is generally efficient but depends on the complexity of `R`.
-    fn map_rows<R>(rows: Vec<HashMap<String, Value>>) -> Result<Vec<R>, DbError>
-    where
-        R: serde::de::DeserializeOwned,
-    {
-        rows.into_iter()
-            .map(|r| {
-                R::deserialize(RowDeserializer::new(&r))
-                    .map_err(|e| DbError::General(format!("Row mapping failed: {}", e)))
-            })
-            .collect()
+        query_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await
     }
 
     /// Retrieves the ID of the last inserted row.
@@ -230,27 +175,14 @@ impl Session {
         let key = self.pool.name().to_string();
         if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(&key).cloned()) {
             let mut ctx = tx.lock().await;
-            return ctx.last_insert_id().await;
+            if let Some(conn) = ctx.connection_mut() {
+                return conn.last_insert_id().await;
+            } else {
+                return Err(DbError::Database("Transaction connection closed".to_string()));
+            }
         }
 
         let mut conn = self.pool.acquire().await?;
         conn.last_insert_id().await
-    }
-
-    /// unified logging helper for execution results
-    fn log_cmd<D: std::fmt::Debug>(
-        &self,
-        op: &str,
-        sql: &str,
-        elapsed: u128,
-        result: &Result<D, DbError>,
-    ) {
-        match result {
-            Ok(val) => debug!(
-                "{}: sql={}, elapsed={}ms, affected/result={:?}",
-                op, sql, elapsed, val
-            ),
-            Err(e) => debug!("{}: sql={}, elapsed={}ms, error={:?}", op, sql, elapsed, e),
-        }
     }
 }

@@ -1,5 +1,5 @@
 mod ast;
-mod cache;
+pub(crate) mod cache;
 pub(crate) mod engine;
 mod parser;
 mod render;

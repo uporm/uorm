@@ -11,7 +11,7 @@ use std::sync::Arc;
 /// Acts as a higher-level abstraction over `Session`, handling SQL ID lookup
 /// and result mapping based on statement type.
 pub struct Mapper {
-    pool: Arc<dyn Driver>,
+    pub pool: Arc<dyn Driver>,
 }
 
 impl Mapper {
