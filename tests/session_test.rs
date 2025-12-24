@@ -1,5 +1,4 @@
 use uorm::udbc::sqlite::pool::SqliteDriver;
-use uorm::udbc::connection::Connection;
 use uorm::executor::session::Session;
 use uorm::udbc::driver::Driver;
 use serde::{Serialize, Deserialize};

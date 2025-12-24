@@ -157,7 +157,9 @@ impl<'a> Parser<'a> {
             && let Some(TagFrame::If { .. }) = self.tag_stack.last()
             && let Some(TagFrame::If { test }) = self.tag_stack.pop()
         {
-            let body = self.nodes_stack.pop().unwrap_or_default();
+            let mut body = self.nodes_stack.pop().unwrap_or_default();
+            self.trim_text_nodes(&mut body);
+
             self.append_node(AstNode::If { test, body });
             self.pos += 5;
             return true;
@@ -171,7 +173,9 @@ impl<'a> Parser<'a> {
                 close,
             }) = self.tag_stack.pop()
         {
-            let body = self.nodes_stack.pop().unwrap_or_default();
+            let mut body = self.nodes_stack.pop().unwrap_or_default();
+            self.trim_text_nodes(&mut body);
+
             self.append_node(AstNode::Foreach {
                 item,
                 collection,
@@ -185,6 +189,39 @@ impl<'a> Parser<'a> {
         }
         false
     }
+
+    fn trim_text_nodes(&self, nodes: &mut Vec<AstNode>) {
+        if let Some(AstNode::Text(text)) = nodes.first_mut() {
+            let trimmed = text.trim_start();
+            let whitespace_len = text.len() - trimmed.len();
+            let whitespace = &text[..whitespace_len];
+            
+            // Only trim if the whitespace contains a newline (block formatting).
+            // If it's just spaces (inline formatting), preserve it.
+            if whitespace.contains('\n') {
+                if trimmed.is_empty() {
+                    nodes.remove(0);
+                } else {
+                    *text = trimmed.to_string();
+                }
+            }
+        }
+
+        // After potential removal, check last (which might be the same node if len=1)
+        if let Some(AstNode::Text(text)) = nodes.last_mut() {
+            let trimmed = text.trim_end();
+            let whitespace = &text[trimmed.len()..];
+
+            if whitespace.contains('\n') {
+                if trimmed.is_empty() {
+                    nodes.pop();
+                } else {
+                    *text = trimmed.to_string();
+                }
+            }
+        }
+    }
+
 
     /// Try to parse a variable expression: `#{var}`.
     fn try_parse_var(&mut self) -> bool {
@@ -241,7 +278,9 @@ impl<'a> Parser<'a> {
     /// Auto-close any remaining unclosed tags at the end of the template.
     fn close_remaining_tags(&mut self) {
         while let Some(tag) = self.tag_stack.pop() {
-            let body = self.nodes_stack.pop().unwrap_or_default();
+            let mut body = self.nodes_stack.pop().unwrap_or_default();
+            self.trim_text_nodes(&mut body);
+            
             let node = match tag {
                 TagFrame::If { test } => AstNode::If { test, body },
                 TagFrame::Foreach {

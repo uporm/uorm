@@ -24,7 +24,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.4.0"
+uorm = "0.4.1"
 ```
 
 ### 特性开关 (Features)
@@ -35,14 +35,14 @@ uorm = "0.4.0"
 ```toml
 [dependencies]
 # 仅启用 MySQL 支持
-uorm = { version = "0.4.0", default-features = false, features = ["mysql"] }
+uorm = { version = "0.4.1", default-features = false, features = ["mysql"] }
 ```
 
 ## 快速开始
 
 ### 1) 注册数据库驱动
 
-通过 `UORM` 全局单例注册驱动。
+通过 `UORM` 全局单例注册驱动。`SqliteDriver` 和 `MysqlDriver` 均采用 Builder 模式。
 
 ```rust
 use uorm::driver_manager::UORM;
@@ -71,17 +71,19 @@ async fn main() -> Result<(), uorm::error::DbError> {
 ```rust
 use uorm::mapper_assets;
 
-// 自动扫描路径下的所有 XML 文件
+// 自动扫描路径下的所有 XML 文件并内嵌
 mapper_assets!["src/resources/**/*.xml"];
 ```
 
 **方式二：运行时加载**
-在程序启动后手动扫描文件系统。
+
+在程序启动后手动扫描文件系统加载 XML。
 
 ```rust
 use uorm::driver_manager::UORM;
 
 fn init_mappers() -> Result<(), uorm::error::DbError> {
+    // 运行时扫描并解析 XML
     UORM.assets("src/resources/**/*.xml")?;
     Ok(())
 }
@@ -109,7 +111,7 @@ pub async fn get_user_by_id(user_id: i64) -> Result<User, uorm::error::DbError> 
     let mapper = UORM.mapper().expect("Driver not found");
     
     // execute 会根据 XML 定义的标签（select/insert/update/delete）自动执行。
-    // 对于 select，如果结果只有一行且返回类型是结构体而非 Vec，会自动解包。
+    // 对于 select，如果结果只有一行且返回类型是结构体而非 Vec，会自动解包（Unwrap）。
     mapper.execute("user.get_by_id", &IdArg { id: user_id }).await
 }
 ```
@@ -134,7 +136,8 @@ struct UserDao;
 impl UserDao {
     #[sql("get_by_id")] // 对应 user.get_by_id
     pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
-        // exec!() 会由宏自动展开为 Mapper 调用逻辑
+        // exec!() 是由 #[sql] 宏在函数内部注入的局部宏
+        // 它会自动捕获函数参数、namespace 和 id 并执行调用
         exec!() 
     }
 
@@ -147,7 +150,7 @@ impl UserDao {
 
 ## 直接执行 SQL (`Session`)
 
-如果不想使用 XML，也可以通过 `Session` 直接执行带有命名参数的 SQL。
+如果不想使用 XML，也可以通过 `Session` 直接执行带有命名参数的 SQL。`uorm` 内部集成了轻量级模板引擎。
 
 ```rust
 use serde::Serialize;
@@ -162,7 +165,7 @@ struct UserParam<'a> {
 pub async fn add_user() -> Result<u64, uorm::error::DbError> {
     let session = UORM.session().expect("Default driver not found");
 
-    // 支持 #{field} 语法绑定参数
+    // 支持 #{field} 语法绑定参数，内部会自动处理 SQL 注入防护
     let affected = session.execute(
         "INSERT INTO users(name, age) VALUES (#{name}, #{age})",
         &UserParam { name: "Alice", age: 18 }
@@ -176,7 +179,7 @@ pub async fn add_user() -> Result<u64, uorm::error::DbError> {
 
 ### 自动事务宏 (`#[transaction]`)
 
-使用 `#[transaction]` 宏可以极大地简化事务代码。如果函数返回 `Err`，事务会自动回滚。
+使用 `#[transaction]` 宏可以极大地简化事务代码。该宏会自动在函数开头注入 `session.begin()`，并根据返回值自动执行 `commit()` 或 `rollback()`。
 
 ```rust
 use uorm::executor::session::Session;
@@ -184,7 +187,7 @@ use uorm::error::DbError;
 
 #[uorm::transaction]
 async fn transfer_data(session: &Session, data: MyData) -> Result<(), DbError> {
-    // 宏会自动注入 session.begin() / commit() / rollback()
+    // 宏会自动注入事务控制逻辑
     
     session.execute("INSERT ...", &data).await?;
     session.execute("UPDATE ...", &data).await?;
@@ -200,6 +203,8 @@ async fn custom_session_name(s: &Session) -> Result<(), DbError> {
 ```
 
 ### 手动管理事务
+
+`uorm` 使用线程局部存储（Thread Local Storage）管理事务上下文，确保在同一线程内的操作共享同一个事务连接。
 
 ```rust
 async fn manual_transaction() -> Result<(), uorm::error::DbError> {
@@ -249,6 +254,7 @@ async fn manual_transaction() -> Result<(), uorm::error::DbError> {
   </select>
 
   <!-- 插入并获取自增 ID -->
+  <!-- 当 useGeneratedKeys 为 true 时，execute 将返回最后插入的 ID -->
   <insert id="insert_user" useGeneratedKeys="true" keyColumn="id">
     INSERT INTO users(name, age) VALUES (#{name}, #{age})
   </insert>
@@ -260,6 +266,8 @@ async fn manual_transaction() -> Result<(), uorm::error::DbError> {
 ### 连接池与超时
 
 ```rust
+use uorm::udbc::ConnectionOptions;
+
 fn configure_driver() -> Result<(), uorm::error::DbError> {
     let options = ConnectionOptions {
         max_open_conns: 20,
@@ -278,17 +286,18 @@ fn configure_driver() -> Result<(), uorm::error::DbError> {
 
 ### SQLite 特殊说明
 
-- **内存数据库**：使用 `sqlite::memory:` 会为每个 `acquire()` 调用创建全新的内存数据库。若需在连接间共享内存数据库，请参考 SQLite 的 `cache=shared` 配置。
-- **并发性**：SQLite 驱动默认开启了 `WAL` 模式和 `foreign_keys` 支持。
+- **并发性**：SQLite 驱动默认开启了 `WAL` 模式（Write-Ahead Logging）和 `foreign_keys` 支持，显著提升并发读写性能。
+- **内存数据库**：使用 `sqlite::memory:` 或 `sqlite://:memory:`。注意：默认配置下每次 `acquire()` 均会创建全新的内存库。若需共享，请使用 `cache=shared`。
 
 ## 日志监控
 
-`uorm` 使用 `log` crate 输出调试信息。建议在开发环境下开启 `debug` 级别：
+`uorm` 使用 `log` crate 输出详细的执行日志。
 
 ```rust
 fn init_logging() {
+    // 建议在开发环境下开启 Debug 级别
     // 输出示例:
-    // DEBUG [uorm] query: sql=SELECT ... WHERE id = ?, params=[I64(1)], elapsed=2ms, rows=1
+    // DEBUG [uorm] Query: sql=SELECT ... WHERE id = ?, params=[("id", I64(1))], elapsed=2ms, rows=1
     env_logger::Builder::new().filter_level(log::LevelFilter::Debug).init();
 }
 ```

@@ -151,7 +151,33 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
             field_inits.push(quote! { #ident: &#ident });
         }
     }
-    
+
+    let (args_struct_def, args_struct_init) = if struct_fields.is_empty() {
+        (
+            quote! {
+                #[derive(serde::Serialize)]
+                struct __UormMapperArgs;
+            },
+            quote! {
+                let __uorm_args = __UormMapperArgs;
+            },
+        )
+    } else {
+        (
+            quote! {
+                #[derive(serde::Serialize)]
+                struct __UormMapperArgs<'a> {
+                    #(#struct_fields),*
+                }
+            },
+            quote! {
+                let __uorm_args = __UormMapperArgs {
+                    #(#field_inits),*
+                };
+            },
+        )
+    };
+
     // The method to call on the mapper (usually 'execute' or 'query').
     // Note: The macro currently hardcodes 'execute', but the actual behavior
     // is often determined by the return type in more complex implementations.
@@ -170,13 +196,8 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #vis #async_token fn #fn_name(#fn_args) #output {
             /// Temporary structure used to serialize function arguments for the SQL template.
-            #[derive(serde::Serialize)]
-            struct __UormMapperArgs<'a> {
-                #(#struct_fields),*
-            }
-            let __uorm_args = __UormMapperArgs {
-                #(#field_inits),*
-            };
+            #args_struct_def
+            #args_struct_init
             let __uorm_namespace: &'static str = #namespace_tokens;
             let __uorm_id: &'static str = #id_lit;
             let __uorm_db_name: &'static str = #db_name_lit;
