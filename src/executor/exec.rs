@@ -20,10 +20,16 @@ pub async fn execute_conn<T: Serialize>(
     let (rendered_sql, params) = engine::render_template(sql, sql, args, driver)?;
     let result = conn.execute(&rendered_sql, &params).await;
     let elapsed = start.elapsed().as_millis();
-    
+
     match &result {
-        Ok(affected) => debug!("Execute: sql={}, params={:?}, elapsed={}ms, affected={}", rendered_sql, params, elapsed, affected),
-        Err(e) => debug!("Execute: sql={}, params={:?}, elapsed={}ms, error={:?}", rendered_sql, params, elapsed, e),
+        Ok(affected) => debug!(
+            "Execute: sql={}, params={:?}, elapsed={}ms, affected={}",
+            rendered_sql, params, elapsed, affected
+        ),
+        Err(e) => debug!(
+            "Execute: sql={}, params={:?}, elapsed={}ms, error={:?}",
+            rendered_sql, params, elapsed, e
+        ),
     }
 
     result
@@ -42,8 +48,17 @@ pub async fn query_conn<T: Serialize>(
     let elapsed = start.elapsed().as_millis();
 
     match &result {
-        Ok(rows) => debug!("Query: sql={}, params={:?}, elapsed={}ms, rows={}", rendered_sql, params, elapsed, rows.len()),
-        Err(e) => debug!("Query: sql={}, params={:?}, elapsed={}ms, error={:?}", rendered_sql, params, elapsed, e),
+        Ok(rows) => debug!(
+            "Query: sql={}, params={:?}, elapsed={}ms, rows={}",
+            rendered_sql,
+            params,
+            elapsed,
+            rows.len()
+        ),
+        Err(e) => debug!(
+            "Query: sql={}, params={:?}, elapsed={}ms, error={:?}",
+            rendered_sql, params, elapsed, e
+        ),
     }
 
     result

@@ -42,10 +42,10 @@ uorm = { version = "0.4.1", default-features = false, features = ["mysql"] }
 
 ### 1) 注册数据库驱动
 
-通过 `UORM` 全局单例注册驱动。`SqliteDriver` 和 `MysqlDriver` 均采用 Builder 模式。
+通过 `U` 全局单例注册驱动。`SqliteDriver` 和 `MysqlDriver` 均采用 Builder 模式。
 
 ```rust
-use uorm::driver_manager::UORM;
+use uorm::driver_manager::U;
 use uorm::udbc::sqlite::pool::SqliteDriver;
 
 #[tokio::main]
@@ -55,7 +55,7 @@ async fn main() -> Result<(), uorm::error::DbError> {
         .build()?;
     
     // 注册到全局管理器
-    UORM.register(driver)?;
+    U.register(driver)?;
 
     Ok(())
 }
@@ -80,11 +80,11 @@ mapper_assets!["src/resources/**/*.xml"];
 在程序启动后手动扫描文件系统加载 XML。
 
 ```rust
-use uorm::driver_manager::UORM;
+use uorm::driver_manager::U;
 
 fn init_mappers() -> Result<(), uorm::error::DbError> {
     // 运行时扫描并解析 XML
-    UORM.assets("src/resources/**/*.xml")?;
+    U.assets("src/resources/**/*.xml")?;
     Ok(())
 }
 ```
@@ -93,7 +93,7 @@ fn init_mappers() -> Result<(), uorm::error::DbError> {
 
 ```rust
 use serde::{Deserialize, Serialize};
-use uorm::driver_manager::UORM;
+use uorm::driver_manager::U;
 
 #[derive(Debug, Deserialize)]
 struct User {
@@ -108,7 +108,7 @@ struct IdArg {
 }
 
 pub async fn get_user_by_id(user_id: i64) -> Result<User, uorm::error::DbError> {
-    let mapper = UORM.mapper().expect("Driver not found");
+    let mapper = U.mapper().expect("Driver not found");
     
     // execute 会根据 XML 定义的标签（select/insert/update/delete）自动执行。
     // 对于 select，如果结果只有一行且返回类型是结构体而非 Vec，会自动解包（Unwrap）。
@@ -154,7 +154,7 @@ impl UserDao {
 
 ```rust
 use serde::Serialize;
-use uorm::driver_manager::UORM;
+use uorm::driver_manager::U;
 
 #[derive(Serialize)]
 struct UserParam<'a> {
@@ -163,7 +163,7 @@ struct UserParam<'a> {
 }
 
 pub async fn add_user() -> Result<u64, uorm::error::DbError> {
-    let session = UORM.session().expect("Default driver not found");
+    let session = U.session().expect("Default driver not found");
 
     // 支持 #{field} 语法绑定参数，内部会自动处理 SQL 注入防护
     let affected = session.execute(
@@ -179,25 +179,55 @@ pub async fn add_user() -> Result<u64, uorm::error::DbError> {
 
 ### 自动事务宏 (`#[transaction]`)
 
-使用 `#[transaction]` 宏可以极大地简化事务代码。该宏会自动在函数开头注入 `session.begin()`，并根据返回值自动执行 `commit()` 或 `rollback()`。
+使用 `#[transaction]` 宏可以简化事务代码：它会在执行函数体前调用 `session.begin().await`，当函数返回 `Ok(_)` 时提交事务（`commit()`），返回 `Err(_)` 时回滚事务（`rollback()`）。
+该宏要求被标注的函数返回 `Result<T, E>`，并且 `E` 能从 `uorm::error::DbError` 转换（即满足 `E: From<DbError>`），以便将 `begin/commit` 的错误向外返回。
 
 ```rust
+use serde::Serialize;
+use uorm::driver_manager::U;
 use uorm::executor::session::Session;
 use uorm::error::DbError;
 
+#[derive(Serialize)]
+struct MyData {
+    id: i64,
+    name: String,
+}
+
 #[uorm::transaction]
-async fn transfer_data(session: &Session, data: MyData) -> Result<(), DbError> {
-    // 宏会自动注入事务控制逻辑
-    
-    session.execute("INSERT ...", &data).await?;
-    session.execute("UPDATE ...", &data).await?;
-    
+async fn transfer_data(session: &Session, data: &MyData) -> Result<(), DbError> {
+    session
+        .execute("INSERT INTO t(id, name) VALUES (#{id}, #{name})", data)
+        .await?;
+    session
+        .execute("UPDATE t SET name = #{name} WHERE id = #{id}", data)
+        .await?;
     Ok(())
 }
 
-// 如果参数名不是 session，可以显式指定：
+#[derive(Serialize)]
+struct IdArg {
+    id: i64,
+}
+
 #[uorm::transaction("s")]
 async fn custom_session_name(s: &Session) -> Result<(), DbError> {
+    s.execute("DELETE FROM t WHERE id = #{id}", &IdArg { id: 1 })
+        .await?;
+    Ok(())
+}
+
+pub async fn run() -> Result<(), DbError> {
+    let session = U.session().expect("Default driver not found");
+    transfer_data(
+        &session,
+        &MyData {
+            id: 1,
+            name: "Alice".to_string(),
+        },
+    )
+    .await?;
+    custom_session_name(&session).await?;
     Ok(())
 }
 ```
@@ -208,7 +238,7 @@ async fn custom_session_name(s: &Session) -> Result<(), DbError> {
 
 ```rust
 async fn manual_transaction() -> Result<(), uorm::error::DbError> {
-    let session = UORM.session().expect("Default driver not found");
+    let session = U.session().expect("Default driver not found");
     session.begin().await?;
 
     match do_work(&session).await {
@@ -267,8 +297,9 @@ async fn manual_transaction() -> Result<(), uorm::error::DbError> {
 
 ```rust
 use uorm::udbc::ConnectionOptions;
+use uorm::udbc::mysql::pool::MysqlDriver;
 
-fn configure_driver() -> Result<(), uorm::error::DbError> {
+fn build_mysql_driver() -> Result<MysqlDriver, uorm::error::DbError> {
     let options = ConnectionOptions {
         max_open_conns: 20,
         max_idle_conns: 5,
@@ -276,18 +307,16 @@ fn configure_driver() -> Result<(), uorm::error::DbError> {
         timeout: 5, // 连接获取超时（秒）
     };
 
-    let driver = MysqlDriver::new("mysql://user:pass@localhost/db")
+    MysqlDriver::new("mysql://user:pass@localhost/db")
         .options(options)
-        .build()?;
-    
-    Ok(())
+        .build()
 }
 ```
 
 ### SQLite 特殊说明
 
 - **并发性**：SQLite 驱动默认开启了 `WAL` 模式（Write-Ahead Logging）和 `foreign_keys` 支持，显著提升并发读写性能。
-- **内存数据库**：使用 `sqlite::memory:` 或 `sqlite://:memory:`。注意：默认配置下每次 `acquire()` 均会创建全新的内存库。若需共享，请使用 `cache=shared`。
+- **内存数据库**：使用 `sqlite::memory:` 或 `sqlite://:memory:`。注意：当前 SQLite 驱动每次 `acquire()` 都会创建新连接；对 `:memory:` 而言，这意味着每次都是全新的空库。需要共享状态时建议使用文件数据库（例如 `sqlite:./app.db`）。
 
 ## 日志监控
 

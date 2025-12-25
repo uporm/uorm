@@ -1,3 +1,4 @@
+use crate::tpl::cache;
 use anyhow::{Context, Result};
 use dashmap::DashMap;
 use glob::glob;
@@ -6,7 +7,6 @@ use quick_xml::reader::Reader;
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
-use crate::tpl::cache;
 
 /// SQL statement type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

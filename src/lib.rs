@@ -3,8 +3,8 @@ pub mod error;
 pub mod executor;
 #[doc(hidden)]
 pub mod mapper_loader;
+mod page;
 pub(crate) mod tpl;
-pub(crate) mod transaction;
 pub mod udbc;
 
 #[doc(hidden)]

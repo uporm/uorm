@@ -1,8 +1,8 @@
-use uorm::udbc::sqlite::pool::SqliteDriver;
 use serde::{Deserialize, Serialize};
 use std::sync::Once;
-use uorm::driver_manager::UORM;
-use uorm::{sql, mapper_assets};
+use uorm::driver_manager::U;
+use uorm::udbc::sqlite::pool::SqliteDriver;
+use uorm::{mapper_assets, sql};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct User {
@@ -51,23 +51,28 @@ mapper_assets!["tests/resources/mapper/user.xml"];
 async fn setup_db() -> Box<dyn uorm::udbc::connection::Connection> {
     INIT.call_once(|| {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
-        
+
         let url = "sqlite:file:macro_test?mode=memory&cache=shared";
         let driver = SqliteDriver::new(url).build().unwrap(); // Default name is "default"
-        
-        // Register the driver to UORM
-        UORM.register(driver).unwrap();
+
+        // Register the driver to U
+        U.register(driver).unwrap();
     });
 
-    let mapper = UORM.mapper().unwrap();
+    let mapper = U.mapper().unwrap();
     let mut conn = mapper.pool.acquire().await.unwrap();
-    conn.execute("CREATE TABLE IF NOT EXISTS users (
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         age INTEGER,
         status TEXT DEFAULT 'active',
         create_time DATETIME DEFAULT CURRENT_TIMESTAMP
-    )", &[]).await.unwrap();
+    )",
+        &[],
+    )
+    .await
+    .unwrap();
     conn
 }
 
@@ -91,7 +96,12 @@ async fn test_user_dao_macros() {
     assert!(users.len() >= 2);
 
     // 4. Test update
-    let alice_id = users.iter().find(|u| u.name.as_deref() == Some("Alice")).unwrap().id.unwrap();
+    let alice_id = users
+        .iter()
+        .find(|u| u.name.as_deref() == Some("Alice"))
+        .unwrap()
+        .id
+        .unwrap();
     let affected = UserDao::update_age(alice_id, 21).await.unwrap();
     assert_eq!(affected, 1);
 

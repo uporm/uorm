@@ -8,9 +8,7 @@ use std::collections::HashMap;
 /// This allows the parser to keep track of the current tag's attributes and nesting level.
 enum TagFrame {
     /// An `<if>` tag frame, storing the test expression.
-    If {
-        test: Expr,
-    },
+    If { test: Expr },
     /// A `<foreach>` tag frame, storing the iteration details.
     Foreach {
         item: String,
@@ -68,7 +66,7 @@ impl<'a> Parser<'a> {
 
         // Close any tags that were left open (e.g., missing </if>).
         self.close_remaining_tags();
-        
+
         // Return the root-level nodes.
         self.nodes_stack.pop().unwrap_or_default()
     }
@@ -195,7 +193,7 @@ impl<'a> Parser<'a> {
             let trimmed = text.trim_start();
             let whitespace_len = text.len() - trimmed.len();
             let whitespace = &text[..whitespace_len];
-            
+
             // Only trim if the whitespace contains a newline (block formatting).
             // If it's just spaces (inline formatting), preserve it.
             if whitespace.contains('\n') {
@@ -221,7 +219,6 @@ impl<'a> Parser<'a> {
             }
         }
     }
-
 
     /// Try to parse a variable expression: `#{var}`.
     fn try_parse_var(&mut self) -> bool {
@@ -280,7 +277,7 @@ impl<'a> Parser<'a> {
         while let Some(tag) = self.tag_stack.pop() {
             let mut body = self.nodes_stack.pop().unwrap_or_default();
             self.trim_text_nodes(&mut body);
-            
+
             let node = match tag {
                 TagFrame::If { test } => AstNode::If { test, body },
                 TagFrame::Foreach {

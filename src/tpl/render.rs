@@ -14,19 +14,24 @@ pub struct RenderBuffer<'a> {
 impl<'a> RenderBuffer<'a> {
     fn push_sql(&mut self, s: &str) {
         let s_starts_with_newline = s.starts_with('\n') || s.starts_with("\r\n");
-        
+
         if s_starts_with_newline {
-             // Check if buffer ends with whitespace that contains a newline
-             let buf_ends_with_newline = self.sql.chars().rev().take_while(|c| c.is_whitespace()).any(|c| c == '\n');
-             
-             if buf_ends_with_newline {
-                 // Collision: Buffer ends with newline (and maybe spaces), new string starts with newline.
-                 // We want to avoid double newlines (blank lines) that are just artifacts of template tags.
-                 // Strategy: Trim the trailing whitespace from the buffer, then append the new string.
-                 // This effectively replaces the "old" indentation/newline with the "new" one.
-                 let trimmed_len = self.sql.trim_end().len();
-                 self.sql.truncate(trimmed_len);
-             }
+            // Check if buffer ends with whitespace that contains a newline
+            let buf_ends_with_newline = self
+                .sql
+                .chars()
+                .rev()
+                .take_while(|c| c.is_whitespace())
+                .any(|c| c == '\n');
+
+            if buf_ends_with_newline {
+                // Collision: Buffer ends with newline (and maybe spaces), new string starts with newline.
+                // We want to avoid double newlines (blank lines) that are just artifacts of template tags.
+                // Strategy: Trim the trailing whitespace from the buffer, then append the new string.
+                // This effectively replaces the "old" indentation/newline with the "new" one.
+                let trimmed_len = self.sql.trim_end().len();
+                self.sql.truncate(trimmed_len);
+            }
         }
         self.sql.push_str(s);
     }

@@ -6,7 +6,7 @@ use crate::udbc::driver::Driver;
 use crate::udbc::serializer::ValueSerializer;
 use crate::udbc::value::Value;
 
-/// Renders a SQL template by substituting parameters and returning the generated SQL 
+/// Renders a SQL template by substituting parameters and returning the generated SQL
 /// along with the bound parameter values.
 ///
 /// This function handles:
@@ -24,7 +24,7 @@ pub fn render_template<T: serde::Serialize>(
 
     // Convert the provided parameters into a generic Value type for SQL execution.
     let value = param.serialize(ValueSerializer)?;
-    
+
     // Initialize the render buffer with estimated capacity to minimize reallocations.
     let mut buf = RenderBuffer {
         sql: String::with_capacity(template_content.len()),
@@ -236,29 +236,29 @@ mod tests {
     fn test_whitespace_trimming() {
         // This test simulates the issue where tags with newlines cause extra vertical whitespace.
         // We use a DELETE statement as the example, but it applies to any statement.
-        
+
         let tpl = "DELETE FROM users\n        WHERE 1=1\n        <if test=\"active\">\n            AND status = 'active'\n        </if>";
-        
+
         let args = IfArgs {
             active: true,
             age: 0,
             name: None,
         };
-        
+
         let (sql, _) = render_template("test_whitespace", tpl, &args, &MockDriver).unwrap();
-        
+
         // The parser should trim the body of the <if> tag:
-        // "\n            AND status = 'active'\n        " 
+        // "\n            AND status = 'active'\n        "
         // becomes "AND status = 'active'"
-        
+
         // So the result should be:
         // "DELETE FROM users\n        WHERE 1=1\n        AND status = 'active'"
         //
         // Without trimming, it would have been:
         // "DELETE FROM users\n        WHERE 1=1\n        \n            AND status = 'active'\n        "
-        
+
         println!("Generated SQL: [{}]", sql);
-        
+
         assert!(sql.contains("WHERE 1=1\n        AND status = 'active'"));
         assert!(!sql.contains("\n\n"));
     }
@@ -282,16 +282,16 @@ mod tests {
 
         // We need a helper to run this since render_template expects a Serialize type,
         // but we constructed a Value manually.
-        // Actually, render_template calls serialize on the input. 
+        // Actually, render_template calls serialize on the input.
         // We can just define a struct or use a Map.
-        
+
         #[derive(Serialize)]
         struct Args {
             name: Option<String>,
             min_age: Option<i32>,
             max_age: Option<i32>,
         }
-        
+
         let args = Args {
             name: None,
             min_age: Some(18),
@@ -299,26 +299,26 @@ mod tests {
         };
 
         let (sql, _) = render_template("test_blank_lines", tpl, &args, &MockDriver).unwrap();
-        
+
         println!("Generated SQL:\n[{}]", sql);
-        
+
         // We want to ensure there are no blank lines (double newlines).
         // The expected output should look like:
         // ...
         // AND age >= ?
         // ORDER BY id
-        
+
         // Current behavior might produce:
         // AND age >= ?
-        // 
+        //
         // ORDER BY id
-        
+
         let strict_double_newline = sql.contains("\n\n");
-        
+
         assert!(!strict_double_newline, "Found double newline");
         // We might need a regex or smarter check for "blank line with whitespace"
         // But simply checking that we don't have excessive vertical space is the goal.
-        
+
         // Let's normalize whitespace to check structure
         let lines: Vec<&str> = sql.lines().filter(|l| !l.trim().is_empty()).collect();
         // Should be: SELECT..., WHERE..., AND..., ORDER...

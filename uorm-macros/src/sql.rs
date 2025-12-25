@@ -33,7 +33,12 @@ impl Parse for SqlArgs {
         let mut namespace = None;
 
         if input.is_empty() {
-            return Ok(SqlArgs { value, id, database, namespace });
+            return Ok(SqlArgs {
+                value,
+                id,
+                database,
+                namespace,
+            });
         }
 
         // Try to parse an optional positional string literal first.
@@ -42,7 +47,12 @@ impl Parse for SqlArgs {
             value = Some(s.value());
 
             if input.is_empty() {
-                return Ok(SqlArgs { value, id, database, namespace });
+                return Ok(SqlArgs {
+                    value,
+                    id,
+                    database,
+                    namespace,
+                });
             }
             // If more arguments follow, they must be separated by a comma.
             input.parse::<Token![,]>()?;
@@ -65,7 +75,12 @@ impl Parse for SqlArgs {
             }
         }
 
-        Ok(SqlArgs { value, id, database, namespace })
+        Ok(SqlArgs {
+            value,
+            id,
+            database,
+            namespace,
+        })
     }
 }
 
@@ -133,7 +148,7 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         .id
         .or(sql_args.value)
         .unwrap_or_else(|| fn_name.to_string());
-    
+
     // Determine the database name, defaulting to "default".
     let db_name = sql_args.database.unwrap_or_else(|| "default".to_string());
 
@@ -203,12 +218,12 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
             let __uorm_db_name: &'static str = #db_name_lit;
 
             // Inject a local `exec!()` macro into the function body.
-            // This local macro captures the context (namespace, id, db_name) and 
+            // This local macro captures the context (namespace, id, db_name) and
             // performs the actual database call.
             macro_rules! exec {
                 () => {{
                     let __uorm_sql_id = format!("{}.{}", __uorm_namespace, __uorm_id);
-                    let __uorm_mapper = uorm::driver_manager::UORM
+                    let __uorm_mapper = uorm::driver_manager::U
                         .mapper_by_name(__uorm_db_name)
                         .expect("Database driver not found");
                     __uorm_mapper.#method_ident(&__uorm_sql_id, &__uorm_args).await

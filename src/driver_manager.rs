@@ -8,14 +8,14 @@ use crate::executor::session::Session;
 use crate::udbc::DEFAULT_DB_NAME;
 use crate::udbc::driver::Driver;
 
-/// The global entry point for the `uorm` library. 
+/// The global entry point for the `uorm` library.
 /// Use this singleton to register drivers, load mapper assets, and create sessions or mappers.
-pub static UORM: LazyLock<DriverManager> = LazyLock::new(DriverManager::new);
+pub static U: LazyLock<DriverManager> = LazyLock::new(DriverManager::new);
 
 /// A manager for database drivers and their associated connection pools.
 ///
-/// `DriverManager` acts as a registry where different database drivers (MySQL, SQLite, etc.) 
-/// can be registered under unique names. It also provides methods to create `Session` 
+/// `DriverManager` acts as a registry where different database drivers (MySQL, SQLite, etc.)
+/// can be registered under unique names. It also provides methods to create `Session`
 /// and `Mapper` instances for interacting with the registered databases.
 pub struct DriverManager {
     /// A thread-safe map storing registered database drivers by their unique names.
@@ -39,9 +39,9 @@ impl DriverManager {
     /// Registers a database driver with the manager.
     ///
     /// The driver's name (retrieved via `driver.name()`) is used as the registration key.
-    /// 
+    ///
     /// # Errors
-    /// Returns an error if a driver with the same name (especially the default name) 
+    /// Returns an error if a driver with the same name (especially the default name)
     /// is already registered.
     pub fn register(&self, driver: impl Driver + 'static) -> Result<(), DbError> {
         let name = driver.name().to_string();
@@ -78,7 +78,7 @@ impl DriverManager {
     /// Creates a `Session` for the specified database by name.
     ///
     /// A `Session` is used for executing raw SQL queries and managing transactions.
-    /// 
+    ///
     /// # Returns
     /// `Some(Session)` if a driver with `db_name` is registered, otherwise `None`.
     pub fn session_by_name(&self, db_name: &str) -> Option<Session> {

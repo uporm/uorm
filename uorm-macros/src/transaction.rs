@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn, LitStr, parse::Parse, parse::ParseStream, Result};
+use syn::{ItemFn, LitStr, Result, parse::Parse, parse::ParseStream, parse_macro_input};
 
 struct TransactionArgs {
     session_name: Option<String>,
@@ -10,8 +10,8 @@ impl Parse for TransactionArgs {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut session_name = None;
         if !input.is_empty() {
-             let s: LitStr = input.parse()?;
-             session_name = Some(s.value());
+            let s: LitStr = input.parse()?;
+            session_name = Some(s.value());
         }
         Ok(TransactionArgs { session_name })
     }
@@ -25,10 +25,10 @@ pub fn transaction_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let session_ident = syn::Ident::new(&session_name, proc_macro2::Span::call_site());
 
     let block = &func.block;
-    
+
     // We assume the return type is Result<T, E> where E: From<DbError>
     // We use fully qualified paths where possible, but here we depend on the method availability on session_ident
-    
+
     let new_block = quote! {
         {
             // Start transaction
@@ -62,5 +62,6 @@ pub fn transaction_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
     quote! {
         #func
-    }.into()
+    }
+    .into()
 }

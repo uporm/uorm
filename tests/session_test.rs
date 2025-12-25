@@ -1,8 +1,8 @@
-use uorm::udbc::sqlite::pool::SqliteDriver;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use uorm::executor::session::Session;
 use uorm::udbc::driver::Driver;
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
+use uorm::udbc::sqlite::pool::SqliteDriver;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct User {
@@ -23,13 +23,18 @@ async fn test_transaction_commit() {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", db_name);
     let driver = SqliteDriver::new(url).name(db_name).build().unwrap();
     let driver = Arc::new(driver);
-    
+
     // Keep a connection open to ensure memory DB persists
     let _keep_alive = driver.acquire().await.unwrap();
 
     // Create table
     let mut conn = driver.acquire().await.unwrap();
-    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)", &[]).await.unwrap();
+    conn.execute(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
+        &[],
+    )
+    .await
+    .unwrap();
     drop(conn);
 
     let session = Session::new(driver.clone());
@@ -39,7 +44,10 @@ async fn test_transaction_commit() {
 
     // Insert data
     let sql = "INSERT INTO users (name, age) VALUES (#{name}, #{age})";
-    let user = NewUser { name: "Alice".to_string(), age: 30 };
+    let user = NewUser {
+        name: "Alice".to_string(),
+        age: 30,
+    };
     session.execute(sql, &user).await.unwrap();
 
     // Commit
@@ -58,13 +66,18 @@ async fn test_transaction_rollback() {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", db_name);
     let driver = SqliteDriver::new(url).name(db_name).build().unwrap();
     let driver = Arc::new(driver);
-    
+
     // Keep a connection open to ensure memory DB persists
     let _keep_alive = driver.acquire().await.unwrap();
-    
+
     // Create table
     let mut conn = driver.acquire().await.unwrap();
-    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)", &[]).await.unwrap();
+    conn.execute(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
+        &[],
+    )
+    .await
+    .unwrap();
     drop(conn);
 
     let session = Session::new(driver.clone());
@@ -74,7 +87,10 @@ async fn test_transaction_rollback() {
 
     // Insert data
     let sql = "INSERT INTO users (name, age) VALUES (#{name}, #{age})";
-    let user = NewUser { name: "Bob".to_string(), age: 25 };
+    let user = NewUser {
+        name: "Bob".to_string(),
+        age: 25,
+    };
     session.execute(sql, &user).await.unwrap();
 
     // Rollback

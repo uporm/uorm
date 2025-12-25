@@ -15,8 +15,8 @@ pub fn mapper_assets_impl(input: TokenStream) -> TokenStream {
     // 2) Get the crate root directory.
     // The CARGO_MANIFEST_DIR env var is set by Cargo at compile time and points to the directory
     // containing Cargo.toml.
-    let manifest_dir =
-        env::var("CARGO_MANIFEST_DIR").expect("Compilation environment error: CARGO_MANIFEST_DIR environment variable not set");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+        .expect("Compilation environment error: CARGO_MANIFEST_DIR environment variable not set");
     let root = PathBuf::from(manifest_dir);
 
     // 3) Build the full glob pattern path.

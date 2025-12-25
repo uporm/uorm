@@ -1,6 +1,6 @@
 use crate::error::DbError;
 use crate::executor::exec::{execute_conn, map_rows, query_conn};
-use crate::transaction::TransactionContext;
+use crate::executor::transaction::TransactionContext;
 use crate::udbc::driver::Driver;
 use crate::udbc::value::Value;
 use std::cell::RefCell;
@@ -30,7 +30,7 @@ impl Session {
     ///
     /// The transaction state is stored in a thread-local map (`TX_CONTEXT`) using the driver's name as the key.
     /// This ensures that nested or subsequent calls within the same thread can access the active transaction.
-    /// 
+    ///
     /// # Errors
     /// Returns `DbError::General` if a transaction has already been started for this driver in the current thread.
     pub async fn begin(&self) -> Result<(), DbError> {
@@ -105,8 +105,8 @@ impl Session {
     /// # Returns
     /// The number of rows affected by the statement.
     ///
-    /// This method automatically detects if it's running within an active transaction. 
-    /// If so, it delegates execution to the transaction context. Otherwise, it renders 
+    /// This method automatically detects if it's running within an active transaction.
+    /// If so, it delegates execution to the transaction context. Otherwise, it renders
     /// the template and executes it directly on a connection from the pool.
     pub async fn execute<T>(&self, sql: &str, args: &T) -> Result<u64, DbError>
     where
@@ -119,7 +119,9 @@ impl Session {
             if let Some(conn) = ctx.connection_mut() {
                 return execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
             } else {
-                return Err(DbError::Database("Transaction connection closed".to_string()));
+                return Err(DbError::Database(
+                    "Transaction connection closed".to_string(),
+                ));
             }
         }
 
@@ -127,7 +129,7 @@ impl Session {
         let mut conn = self.pool.acquire().await?;
         execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await
     }
-    
+
     /// Executes a SQL query and maps the resulting rows to a collection of type `R`.
     ///
     /// # Arguments
@@ -162,7 +164,9 @@ impl Session {
             if let Some(conn) = ctx.connection_mut() {
                 return query_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
             } else {
-                return Err(DbError::Database("Transaction connection closed".to_string()));
+                return Err(DbError::Database(
+                    "Transaction connection closed".to_string(),
+                ));
             }
         }
 
@@ -178,7 +182,9 @@ impl Session {
             if let Some(conn) = ctx.connection_mut() {
                 return conn.last_insert_id().await;
             } else {
-                return Err(DbError::Database("Transaction connection closed".to_string()));
+                return Err(DbError::Database(
+                    "Transaction connection closed".to_string(),
+                ));
             }
         }
 
