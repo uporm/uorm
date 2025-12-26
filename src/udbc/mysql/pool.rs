@@ -2,7 +2,7 @@ use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::mysql::connection::MysqlConnection;
-use crate::udbc::{ConnectionOptions, DEFAULT_DB_NAME};
+use crate::udbc::{PoolOptions, DEFAULT_DB_NAME};
 use async_trait::async_trait;
 use mysql_async::{Opts, OptsBuilder, Pool, PoolConstraints, PoolOpts};
 use std::time::Duration;
@@ -18,7 +18,7 @@ const MYSQL_TYPE: &str = "mysql";
 pub struct MysqlDriver {
     url: String,
     name: String,
-    options: Option<ConnectionOptions>,
+    options: Option<PoolOptions>,
     pool: Option<Pool>,
 }
 
@@ -41,7 +41,7 @@ impl MysqlDriver {
 
     /// Configures the connection options (e.g., pool size, timeout).
     /// Returns `Self` to allow method chaining.
-    pub fn options(mut self, options: ConnectionOptions) -> Self {
+    pub fn options(mut self, options: PoolOptions) -> Self {
         self.options = Some(options);
         self
     }

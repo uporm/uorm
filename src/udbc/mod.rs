@@ -10,7 +10,7 @@ pub(crate) mod value;
 
 pub const DEFAULT_DB_NAME: &str = "default";
 
-pub struct ConnectionOptions {
+pub struct PoolOptions {
     pub max_open_conns: u64, // Set the maximum number of connections in the pool
     pub max_idle_conns: u64, // Set the maximum number of idle connections in the pool
     pub max_lifetime: u64,   // Set the maximum lifetime of a connection

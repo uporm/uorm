@@ -6,7 +6,7 @@ use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::sqlite::connection::SqliteConnection;
-use crate::udbc::{ConnectionOptions, DEFAULT_DB_NAME};
+use crate::udbc::{PoolOptions, DEFAULT_DB_NAME};
 
 const SQLITE_TYPE: &str = "sqlite";
 
@@ -47,7 +47,7 @@ pub struct SqliteDriver {
     url: String,
     name: String,
     // type is constant "sqlite", no need to store it
-    options: Option<ConnectionOptions>,
+    options: Option<PoolOptions>,
     target: Option<SqliteTarget>,
 }
 
@@ -66,7 +66,7 @@ impl SqliteDriver {
         self
     }
 
-    pub fn options(mut self, options: ConnectionOptions) -> Self {
+    pub fn options(mut self, options: PoolOptions) -> Self {
         self.options = Some(options);
         self
     }
