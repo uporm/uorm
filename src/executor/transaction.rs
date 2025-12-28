@@ -1,7 +1,7 @@
-use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use std::sync::Arc;
+use crate::Result;
 
 pub(crate) struct TransactionContext {
     conn: Option<Box<dyn Connection>>,
@@ -9,8 +9,8 @@ pub(crate) struct TransactionContext {
 }
 
 impl TransactionContext {
-    pub async fn begin(pool: Arc<dyn Driver>) -> Result<Self, DbError> {
-        let mut conn = pool.acquire().await?;
+    pub async fn begin(pool: Arc<dyn Driver>) -> Result<Self> {
+        let mut conn: Box<dyn Connection> = pool.acquire().await?;
         conn.begin().await?;
         Ok(Self {
             conn: Some(conn),
@@ -18,7 +18,7 @@ impl TransactionContext {
         })
     }
 
-    pub async fn commit(&mut self) -> Result<(), DbError> {
+    pub async fn commit(&mut self) -> Result<()> {
         if let Some(conn) = self.conn.as_mut() {
             conn.commit().await?;
         }
@@ -26,7 +26,7 @@ impl TransactionContext {
         Ok(())
     }
 
-    pub async fn rollback(&mut self) -> Result<(), DbError> {
+    pub async fn rollback(&mut self) -> Result<()> {
         let r = if let Some(conn) = self.conn.as_mut() {
             conn.rollback().await
         } else {

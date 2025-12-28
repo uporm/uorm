@@ -1,4 +1,4 @@
-use crate::error::DbError;
+use crate::error::SerdeError;
 use crate::udbc::value::Value;
 use serde::Serialize;
 use serde::ser::*;
@@ -9,7 +9,7 @@ pub struct ValueSerializer;
 
 impl Serializer for ValueSerializer {
     type Ok = Value;
-    type Error = DbError;
+    type Error = SerdeError;
     type SerializeSeq = ListSerializer;
     type SerializeTuple = ListSerializer;
     type SerializeTupleStruct = ListSerializer;
@@ -158,7 +158,7 @@ macro_rules! impl_serialize_seq {
     ($trait:ident, $method:ident) => {
         impl $trait for ListSerializer {
             type Ok = Value;
-            type Error = DbError;
+            type Error = SerdeError;
 
             fn $method<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
                 self.vec.push(value.serialize(ValueSerializer)?);
@@ -184,7 +184,7 @@ pub struct MapSerializer {
 
 impl SerializeMap for MapSerializer {
     type Ok = Value;
-    type Error = DbError;
+    type Error = SerdeError;
 
     fn serialize_key<T: ?Sized + Serialize>(&mut self, key: &T) -> Result<(), Self::Error> {
         let k = key.serialize(ValueSerializer)?;
@@ -192,7 +192,7 @@ impl SerializeMap for MapSerializer {
             self.key = Some(s);
             Ok(())
         } else {
-            Err(DbError::Value("Map key must be string".to_string()))
+            Err(SerdeError::custom("Map key must be string"))
         }
     }
 
@@ -201,7 +201,7 @@ impl SerializeMap for MapSerializer {
         let key = self
             .key
             .take()
-            .ok_or_else(|| DbError::Value("Missing key for value".to_string()))?;
+            .ok_or_else(|| SerdeError::custom("Missing key for value"))?;
         self.map.insert(key, v);
         Ok(())
     }
@@ -215,7 +215,7 @@ macro_rules! impl_serialize_struct {
     ($trait:ident) => {
         impl $trait for MapSerializer {
             type Ok = Value;
-            type Error = DbError;
+            type Error = SerdeError;
 
             fn serialize_field<T: ?Sized + Serialize>(
                 &mut self,

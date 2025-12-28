@@ -1,4 +1,5 @@
 use crate::error::DbError;
+use crate::Result;
 use crate::executor::session::Session;
 use crate::mapper_loader::{SqlStatement, StatementType, find_statement};
 use crate::udbc::deserializer::ValueDeserializer;
@@ -25,9 +26,9 @@ impl Mapper {
         Session::new(self.pool.clone())
     }
 
-    fn get_statement(&self, sql_id: &str) -> Result<Arc<SqlStatement>, DbError> {
+    fn get_statement(&self, sql_id: &str) -> Result<Arc<SqlStatement>> {
         find_statement(sql_id, self.pool.r#type())
-            .ok_or_else(|| DbError::Query(format!("SQL ID not found: {}", sql_id)))
+            .ok_or_else(|| DbError::TemplateEngineError(format!("SQL ID not found: {}", sql_id)))
     }
 
     /// Executes a mapped SQL statement by ID.
@@ -37,7 +38,7 @@ impl Mapper {
     ///   - For `Select`, `R` is typically `Vec<T>`.
     ///   - For `Insert`/`Update`/`Delete`, `R` is typically `u64` (affected rows) or `i64`.
     /// * `T`: Argument type. Must be serializable (passed to the template engine).
-    pub async fn execute<R, T>(&self, sql_id: &str, args: &T) -> Result<R, DbError>
+    pub async fn execute<R, T>(&self, sql_id: &str, args: &T) -> Result<R>
     where
         T: serde::Serialize,
         R: serde::de::DeserializeOwned,
@@ -47,11 +48,11 @@ impl Mapper {
             .as_ref()
             .content
             .as_deref()
-            .ok_or_else(|| DbError::Query(format!("SQL content empty for {}", sql_id)))?;
+            .ok_or_else(|| DbError::TemplateEngineError(format!("SQL content empty for {}", sql_id)))?;
 
         match stmt.r#type {
             StatementType::Select => {
-                let rows = self.session().query_raw(sql, args).await?;
+                let rows: Vec<std::collections::HashMap<String, Value>> = self.session().query_raw(sql, args).await?;
 
                 // Performance Note:
                 // We convert Vec<HashMap> -> Value::List(Vec<Value::Map>) -> R.
@@ -60,7 +61,7 @@ impl Mapper {
                 // or changing the Session API to return R directly.
                 // Given the current architecture, this is the safe approach.
                 let value = Value::List(rows.into_iter().map(Value::Map).collect());
-                R::deserialize(ValueDeserializer { value: &value })
+                Ok(R::deserialize(ValueDeserializer { value: &value })?)
             }
             StatementType::Insert => {
                 let session = self.session();
@@ -72,15 +73,15 @@ impl Mapper {
                     affected as i64
                 };
 
-                R::deserialize(ValueDeserializer {
+                Ok(R::deserialize(ValueDeserializer {
                     value: &Value::I64(val),
-                })
+                })?)
             }
             StatementType::Update | StatementType::Delete | StatementType::Sql => {
                 let affected = self.session().execute(sql, args).await?;
-                R::deserialize(ValueDeserializer {
+                Ok(R::deserialize(ValueDeserializer {
                     value: &Value::I64(affected as i64),
-                })
+                })?)
             }
         }
     }

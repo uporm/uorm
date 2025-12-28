@@ -124,6 +124,46 @@ fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+fn is_primitive_or_wrapper(ty: &syn::Type) -> bool {
+    match ty {
+        syn::Type::Path(type_path) => {
+            if let Some(ident) = type_path.path.get_ident() {
+                let s = ident.to_string();
+                matches!(
+                    s.as_str(),
+                    "bool"
+                        | "char"
+                        | "i8"
+                        | "i16"
+                        | "i32"
+                        | "i64"
+                        | "i128"
+                        | "isize"
+                        | "u8"
+                        | "u16"
+                        | "u32"
+                        | "u64"
+                        | "u128"
+                        | "usize"
+                        | "f32"
+                        | "f64"
+                        | "str"
+                        | "String"
+                        | "Vec"
+                        | "Option"
+                )
+            } else if let Some(last) = type_path.path.segments.last() {
+                let s = last.ident.to_string();
+                matches!(s.as_str(), "String" | "Vec" | "Option")
+            } else {
+                false
+            }
+        }
+        syn::Type::Reference(type_ref) => is_primitive_or_wrapper(&type_ref.elem),
+        _ => true,
+    }
+}
+
 /// Handles `#[sql]` when applied to a function.
 ///
 /// It transforms the function body to:
@@ -156,18 +196,63 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut struct_fields = Vec::new();
     let mut field_inits = Vec::new();
 
-    for arg in fn_args {
-        if let syn::FnArg::Typed(pat_type) = arg
-            && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
-        {
-            let ident = &pat_ident.ident;
-            let ty = &pat_type.ty;
-            struct_fields.push(quote! { #ident: &'a #ty });
-            field_inits.push(quote! { #ident: &#ident });
+    let mut use_arg_directly = false;
+    let mut direct_arg_ident = None;
+
+    // Check if we should unwrap a single struct argument
+    let typed_args: Vec<&syn::PatType> = fn_args
+        .iter()
+        .filter_map(|arg| {
+            if let syn::FnArg::Typed(pat_type) = arg {
+                Some(pat_type)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if typed_args.len() == 1 {
+        let arg = typed_args[0];
+        if !is_primitive_or_wrapper(&arg.ty) {
+            if let syn::Pat::Ident(pat_ident) = &*arg.pat {
+                use_arg_directly = true;
+                direct_arg_ident = Some(&pat_ident.ident);
+            }
         }
     }
 
-    let (args_struct_def, args_struct_init) = if struct_fields.is_empty() {
+    if !use_arg_directly {
+        for arg in fn_args {
+            if let syn::FnArg::Typed(pat_type) = arg
+                && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                let ident = &pat_ident.ident;
+                let ty = &pat_type.ty;
+
+                // Check if ty is a reference to handle `&T` arguments correctly.
+                // If it is a reference, we use the inner type for the struct field
+                // and initialize it directly with the argument (which is already a reference).
+                if let syn::Type::Reference(type_ref) = &**ty {
+                    let inner_ty = &type_ref.elem;
+                    struct_fields.push(quote! { #ident: &'a #inner_ty });
+                    field_inits.push(quote! { #ident: #ident });
+                } else {
+                    struct_fields.push(quote! { #ident: &'a #ty });
+                    field_inits.push(quote! { #ident: &#ident });
+                }
+            }
+        }
+    }
+
+    let (args_struct_def, args_struct_init) = if use_arg_directly {
+        let ident = direct_arg_ident.unwrap();
+        (
+            quote! {},
+            quote! {
+                let __uorm_args = &#ident;
+            },
+        )
+    } else if struct_fields.is_empty() {
         (
             quote! {
                 #[derive(serde::Serialize)]

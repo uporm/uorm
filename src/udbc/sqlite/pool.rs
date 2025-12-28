@@ -3,10 +3,11 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use crate::error::DbError;
+use crate::Result;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::sqlite::connection::SqliteConnection;
-use crate::udbc::{PoolOptions, DEFAULT_DB_NAME};
+use crate::udbc::{DEFAULT_DB_NAME, PoolOptions};
 
 const SQLITE_TYPE: &str = "sqlite";
 
@@ -19,7 +20,7 @@ enum SqliteTarget {
 impl FromStr for SqliteTarget {
     type Err = DbError;
 
-    fn from_str(url: &str) -> Result<Self, Self::Err> {
+    fn from_str(url: &str) -> Result<Self> {
         let url = url.trim();
         // Support "sqlite://" or "sqlite:" prefix, or no prefix
         let path = if let Some(stripped) = url.strip_prefix("sqlite://") {
@@ -32,7 +33,7 @@ impl FromStr for SqliteTarget {
 
         let path = path.trim();
         if path.is_empty() {
-            return Err(DbError::InvalidDatabaseUrl(url.to_string()));
+            return Err(DbError::DbUrlError(url.to_string()));
         }
 
         if path == ":memory:" {
@@ -71,36 +72,41 @@ impl SqliteDriver {
         self
     }
 
-    pub fn build(mut self) -> Result<Self, DbError> {
+    pub fn build(mut self) -> Result<Self> {
         self.target = Some(SqliteTarget::from_str(&self.url)?);
         Ok(self)
     }
 
-    fn open_connection(
-        target: &SqliteTarget,
-        timeout_secs: u64,
-    ) -> Result<rusqlite::Connection, DbError> {
+    fn open_connection(target: &SqliteTarget, timeout_secs: u64) -> Result<rusqlite::Connection> {
         let conn = match target {
             SqliteTarget::Memory => rusqlite::Connection::open_in_memory(),
             SqliteTarget::Path(p) => rusqlite::Connection::open(p),
         }
-        .map_err(|e| DbError::Database(format!("Failed to open connection: {}", e)))?;
+        .map_err(|e| {
+            DbError::DbError(format!("Failed to open connection: {}", e))
+        })?;
 
         // Set busy_timeout FIRST to handle potential locks during PRAGMA execution
         if timeout_secs > 0 {
             conn.busy_timeout(Duration::from_secs(timeout_secs))
-                .map_err(|e| DbError::Database(format!("Failed to set busy_timeout: {}", e)))?;
+                .map_err(|e| {
+                    DbError::DbError(format!("Failed to set busy_timeout: {}", e))
+                })?;
         }
 
         // Enforce foreign keys for data integrity
         conn.execute_batch("PRAGMA foreign_keys = ON;")
-            .map_err(|e| DbError::Database(format!("Failed to set foreign_keys: {}", e)))?;
+            .map_err(|e| {
+                DbError::DbError(format!("Failed to set foreign_keys: {}", e))
+            })?;
 
         // WAL mode improves concurrency (readers don't block writers).
         // synchronous = NORMAL is safe for WAL and faster.
         // Note: Changing journal_mode requires a write lock on the database file.
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
-            .map_err(|e| DbError::Database(format!("Failed to set journal_mode: {}", e)))?;
+            .map_err(|e| {
+                DbError::DbError(format!("Failed to set journal_mode: {}", e))
+            })?;
 
         Ok(conn)
     }
@@ -120,9 +126,9 @@ impl Driver for SqliteDriver {
         "?".to_string()
     }
 
-    async fn acquire(&self) -> Result<Box<dyn Connection>, DbError> {
+    async fn acquire(&self) -> Result<Box<dyn Connection>> {
         let target = self.target.as_ref().ok_or_else(|| {
-            DbError::Database(
+            DbError::DbError(
                 "Driver not built (target missing). Call build() after new().".to_string(),
             )
         })?;
@@ -134,15 +140,20 @@ impl Driver for SqliteDriver {
         // NOTE: This creates a new physical connection per call. For high throughput, a connection pool (e.g. r2d2) is recommended.
         // WARNING: For `SqliteTarget::Memory`, this creates a FRESH, empty database for every call.
         // To share in-memory state, use a file-based URL with shared cache (e.g. "file::memory:?cache=shared") and SqliteTarget::Path.
-        tokio::task::spawn_blocking(move || {
-            let conn = Self::open_connection(&target_clone, timeout_secs)?;
-            Ok::<_, DbError>(Box::new(SqliteConnection::new(conn)) as Box<dyn Connection>)
-        })
-        .await
-        .map_err(|e| DbError::Database(format!("Task join error: {}", e)))?
+        let handle: tokio::task::JoinHandle<Result<Box<dyn Connection>>> =
+            tokio::task::spawn_blocking(move || {
+                let conn = Self::open_connection(&target_clone, timeout_secs)?;
+                Ok::<Box<dyn Connection>, DbError>(
+                    Box::new(SqliteConnection::new(conn)) as Box<dyn Connection>
+                )
+            });
+
+        handle.await.map_err(|e: tokio::task::JoinError| {
+            DbError::DbError(format!("Task join error: {}", e))
+        })?
     }
 
-    async fn close(&self) -> Result<(), DbError> {
+    async fn close(&self) -> Result<()> {
         // No-op: connections are closed when dropped.
         Ok(())
     }

@@ -1,67 +1,40 @@
 use thiserror::Error;
 
-/// Represents all possible errors that can occur within the `uorm` crate.
 #[derive(Error, Debug)]
 pub enum DbError {
-    /// A generic error with a custom message.
-    #[error("{0}")]
-    General(String),
+    #[error("Database Error: {0}")]
+    DbError(String),
+    #[error("Invalid Database Url: {0}")]
+    DbUrlError(String),
+    #[error("Serialization Error: {0}")]
+    SerializationError(String),
+    #[error("Query Build Error: {0}")]
+    QueryBuildError(String),
+    #[error("Data Conversion Error: {0}")]
+    DataConversionError(String),
+    #[error("Mapper Load Error: {0}")]
+    MapperLoadError(String),
+    #[error("Driver Error: {0}")]
+    DriverError(String),
+    #[error("Template Engine Error: {0}")]
+    TemplateEngineError(String),
+    #[error("SQL Execution Error: {0}")]
+    SqlExecutionError(String),
+}
 
-    /// An error originating from an underlying database driver.
-    #[error("Driver error: {0}")]
-    Driver(#[source] Box<dyn std::error::Error + Send + Sync>),
+// Aliases for compatibility
+pub type Error = DbError;
+pub type SerdeError = DbError;
 
-    /// An error related to database connection management (e.g., failed to acquire from pool).
-    #[error("Connection error: {0}")]
-    Connection(String),
 
-    /// An error that occurred during the execution of a SQL query.
-    #[error("Query error: {0}")]
-    Query(String),
-
-    /// An error related to value conversion or serialization/deserialization.
-    #[error("Value error: {0}")]
-    Value(String),
-
-    /// Error indicating that a requested feature or method is not yet implemented.
-    #[error("Not implemented")]
-    NotImplemented,
-
-    /// Error indicating that the provided database type is not supported by the current configuration.
-    #[error("Unsupported database type: {0}")]
-    UnsupportedDatabaseType(String),
-
-    /// Error indicating that the database connection URL is malformed or invalid.
-    #[error("Invalid database URL: {0}")]
-    InvalidDatabaseUrl(String),
-
-    /// A high-level database error, typically wrapping driver-specific errors.
-    #[error("Database error: {0}")]
-    Database(String),
+impl serde::ser::Error for DbError {
+    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+        DbError::SerializationError(msg.to_string())
+    }
 }
 
 impl serde::de::Error for DbError {
     fn custom<T: std::fmt::Display>(msg: T) -> Self {
-        DbError::General(msg.to_string())
-    }
-}
-
-impl serde::ser::Error for DbError {
-    fn custom<T: std::fmt::Display>(msg: T) -> Self {
-        DbError::General(msg.to_string())
-    }
-}
-
-#[cfg(feature = "mysql")]
-impl From<mysql_async::Error> for DbError {
-    fn from(e: mysql_async::Error) -> Self {
-        DbError::Database(e.to_string())
-    }
-}
-
-#[cfg(feature = "sqlite")]
-impl From<rusqlite::Error> for DbError {
-    fn from(e: rusqlite::Error) -> Self {
-        DbError::Database(e.to_string())
+        DbError::SerializationError(msg.to_string())
     }
 }

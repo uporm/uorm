@@ -1,4 +1,4 @@
-use crate::error::DbError;
+use crate::Result;
 use crate::udbc::connection::Connection;
 use async_trait::async_trait;
 
@@ -41,8 +41,8 @@ pub trait Driver: Send + Sync {
     ///
     /// # Returns
     /// - `Ok(Box<dyn Connection>)` if the connection is successfully established
-    /// - `Err(DbError)` if connection creation fails
-    async fn acquire(&self) -> Result<Box<dyn Connection>, DbError>;
+    /// - `Err(Error)` if connection creation fails
+    async fn acquire(&self) -> Result<Box<dyn Connection>>;
 
     /// Closes the driver and releases any associated resources.
     ///
@@ -50,6 +50,6 @@ pub trait Driver: Send + Sync {
     ///
     /// # Returns
     /// - `Ok(())` if cleanup succeeds
-    /// - `Err(DbError)` if an error occurs during cleanup
-    async fn close(&self) -> Result<(), DbError>;
+    /// - `Err(Error)` if an error occurs during cleanup
+    async fn close(&self) -> Result<()>;
 }

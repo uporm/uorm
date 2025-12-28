@@ -1,4 +1,5 @@
 use crate::error::DbError;
+use crate::Result;
 use crate::tpl::engine;
 use crate::udbc::connection::Connection;
 use crate::udbc::deserializer::RowDeserializer;
@@ -15,7 +16,7 @@ pub async fn execute_conn<T: Serialize>(
     driver: &dyn Driver,
     sql: &str,
     args: &T,
-) -> Result<u64, DbError> {
+) -> Result<u64> {
     let start = Instant::now();
     let (rendered_sql, params) = engine::render_template(sql, sql, args, driver)?;
     let result = conn.execute(&rendered_sql, &params).await;
@@ -24,11 +25,11 @@ pub async fn execute_conn<T: Serialize>(
     match &result {
         Ok(affected) => debug!(
             "Execute: sql={}, params={:?}, elapsed={}ms, affected={}",
-            rendered_sql, params, elapsed, affected
+            &rendered_sql, &params, elapsed, affected
         ),
         Err(e) => debug!(
             "Execute: sql={}, params={:?}, elapsed={}ms, error={:?}",
-            rendered_sql, params, elapsed, e
+            &rendered_sql, &params, elapsed, e
         ),
     }
 
@@ -41,23 +42,23 @@ pub async fn query_conn<T: Serialize>(
     driver: &dyn Driver,
     sql: &str,
     args: &T,
-) -> Result<Vec<HashMap<String, Value>>, DbError> {
+) -> Result<Vec<HashMap<String, Value>>> {
     let start = Instant::now();
     let (rendered_sql, params) = engine::render_template(sql, sql, args, driver)?;
-    let result = conn.query(&rendered_sql, &params).await;
+    let result: Result<Vec<HashMap<String, Value>>> = conn.query(&rendered_sql, &params).await;
     let elapsed = start.elapsed().as_millis();
 
     match &result {
         Ok(rows) => debug!(
             "Query: sql={}, params={:?}, elapsed={}ms, rows={}",
-            rendered_sql,
-            params,
+            &rendered_sql,
+            &params,
             elapsed,
             rows.len()
         ),
         Err(e) => debug!(
             "Query: sql={}, params={:?}, elapsed={}ms, error={:?}",
-            rendered_sql, params, elapsed, e
+            &rendered_sql, &params, elapsed, e
         ),
     }
 
@@ -65,14 +66,14 @@ pub async fn query_conn<T: Serialize>(
 }
 
 /// Maps raw database rows to the target type `R`.
-pub fn map_rows<R>(rows: Vec<HashMap<String, Value>>) -> Result<Vec<R>, DbError>
+pub fn map_rows<R>(rows: Vec<HashMap<String, Value>>) -> Result<Vec<R>>
 where
     R: serde::de::DeserializeOwned,
 {
     rows.into_iter()
         .map(|r| {
             R::deserialize(RowDeserializer::new(&r))
-                .map_err(|e| DbError::General(format!("Row mapping failed: {}", e)))
+                .map_err(|e| DbError::SerializationError(format!("Row mapping failed: {}", e)))
         })
         .collect()
 }

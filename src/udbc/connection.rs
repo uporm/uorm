@@ -1,4 +1,4 @@
-use crate::error::DbError;
+use crate::Result;
 use crate::udbc::value::Value;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ pub trait Connection: Send {
         &mut self,
         sql: &str,
         args: &[(String, Value)],
-    ) -> Result<Vec<HashMap<String, Value>>, DbError>;
+    ) -> Result<Vec<HashMap<String, Value>>>;
 
     /// Execute a non-query statement (INSERT, UPDATE, DELETE) and return the number of affected rows.
     ///
@@ -29,19 +29,19 @@ pub trait Connection: Send {
     ///
     /// # Returns
     /// The number of affected rows
-    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64, DbError>;
+    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64>;
 
     /// Get the ID of the last inserted row.
     ///
     /// # Returns
     /// The ID of the last inserted row
-    async fn last_insert_id(&mut self) -> Result<u64, DbError>;
+    async fn last_insert_id(&mut self) -> Result<u64>;
 
     // ---------- transaction ----------
     /// Begin a transaction
-    async fn begin(&mut self) -> Result<(), DbError>;
+    async fn begin(&mut self) -> Result<()>;
     /// Commit the current transaction
-    async fn commit(&mut self) -> Result<(), DbError>;
+    async fn commit(&mut self) -> Result<()>;
     /// Rollback the current transaction
-    async fn rollback(&mut self) -> Result<(), DbError>;
+    async fn rollback(&mut self) -> Result<()>;
 }

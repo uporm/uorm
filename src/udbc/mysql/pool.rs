@@ -1,4 +1,5 @@
 use crate::error::DbError;
+use crate::Result;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::mysql::connection::MysqlConnection;
@@ -49,12 +50,12 @@ impl MysqlDriver {
     /// Builds the connection pool and prepares the driver for use.
     ///
     /// # Errors
-    /// Returns `DbError` if:
+    /// Returns `Error` if:
     /// - The connection URL is invalid.
     /// - Pool constraints are invalid (e.g., max_idle > max_open or max_open == 0).
-    pub fn build(mut self) -> Result<Self, DbError> {
+    pub fn build(mut self) -> Result<Self> {
         let opts = Opts::from_url(&self.url)
-            .map_err(|e| self.err_context(format!("Invalid connection URL: {}", e)))?;
+            .map_err(|e| DbError::DbUrlError(format!("[{}] Invalid connection URL: {}", self.name, e)))?;
 
         let mut builder = OptsBuilder::from_opts(opts);
 
@@ -97,7 +98,7 @@ impl MysqlDriver {
 
     /// Helper to format errors with the driver name context.
     fn err_context<T: std::fmt::Display>(&self, msg: T) -> DbError {
-        DbError::Database(format!("[{}] {}", self.name, msg))
+        DbError::DbError(format!("[{}] {}", self.name, msg))
     }
 }
 
@@ -116,7 +117,7 @@ impl Driver for MysqlDriver {
         "?".to_string()
     }
 
-    async fn acquire(&self) -> Result<Box<dyn Connection>, DbError> {
+    async fn acquire(&self) -> Result<Box<dyn Connection>> {
         let pool = self.pool.as_ref().ok_or_else(|| {
             self.err_context("Connection pool not initialized (call build() first)")
         })?;
@@ -147,7 +148,7 @@ impl Driver for MysqlDriver {
         Ok(Box::new(MysqlConnection::new(conn)))
     }
 
-    async fn close(&self) -> Result<(), DbError> {
+    async fn close(&self) -> Result<()> {
         if let Some(pool) = &self.pool {
             // Gracefully disconnect the pool.
             // We clone the pool handle because disconnect() consumes it,

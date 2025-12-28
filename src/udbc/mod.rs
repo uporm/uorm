@@ -6,7 +6,9 @@ pub mod mysql;
 pub(crate) mod serializer;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
-pub(crate) mod value;
+pub mod value;
+
+pub use value::Value;
 
 pub const DEFAULT_DB_NAME: &str = "default";
 

@@ -1,4 +1,4 @@
-use crate::error::DbError;
+use crate::error::SerdeError;
 use crate::udbc::value::Value;
 use serde::de::{self, Deserializer, IntoDeserializer, MapAccess, Visitor};
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ impl<'a> RowDeserializer<'a> {
 }
 
 impl<'de, 'a> Deserializer<'de> for RowDeserializer<'a> {
-    type Error = DbError;
+    type Error = SerdeError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
@@ -45,7 +45,7 @@ impl<'a> RowMapAccess<'a> {
 }
 
 impl<'de, 'a> MapAccess<'de> for RowMapAccess<'a> {
-    type Error = DbError;
+    type Error = SerdeError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where
@@ -79,7 +79,7 @@ impl<'a> ValueSeqAccess<'a> {
 }
 
 impl<'de, 'a> de::SeqAccess<'de> for ValueSeqAccess<'a> {
-    type Error = DbError;
+    type Error = SerdeError;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
@@ -98,7 +98,7 @@ pub struct ValueDeserializer<'a> {
 }
 
 impl<'de, 'a> Deserializer<'de> for ValueDeserializer<'a> {
-    type Error = DbError;
+    type Error = SerdeError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where

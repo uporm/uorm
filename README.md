@@ -24,7 +24,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.4.1"
+uorm = "0.5.0"
 ```
 
 ### 特性开关 (Features)
@@ -35,7 +35,7 @@ uorm = "0.4.1"
 ```toml
 [dependencies]
 # 仅启用 MySQL 支持
-uorm = { version = "0.4.1", default-features = false, features = ["mysql"] }
+uorm = { version = "0.5.0", default-features = false, features = ["mysql"] }
 ```
 
 ## 快速开始
@@ -49,7 +49,7 @@ use uorm::driver_manager::U;
 use uorm::udbc::sqlite::pool::SqliteDriver;
 
 #[tokio::main]
-async fn main() -> Result<(), uorm::error::DbError> {
+async fn main() -> uorm::error::Result<()> {
     // 创建驱动并指定名称（默认为 "default"）
     let driver = SqliteDriver::new("sqlite::memory:")
         .build()?;
@@ -72,7 +72,7 @@ async fn main() -> Result<(), uorm::error::DbError> {
 use uorm::mapper_assets;
 
 // 自动扫描路径下的所有 XML 文件并内嵌
-mapper_assets!["src/resources/**/*.xml"];
+mapper_assets!["resources/mappers"];
 ```
 
 **方式二：运行时加载**
@@ -82,9 +82,9 @@ mapper_assets!["src/resources/**/*.xml"];
 ```rust
 use uorm::driver_manager::U;
 
-fn init_mappers() -> Result<(), uorm::error::DbError> {
+fn init_mappers() -> uorm::error::Result<()> {
     // 运行时扫描并解析 XML
-    U.assets("src/resources/**/*.xml")?;
+    U.assets("resources/mappers")?;
     Ok(())
 }
 ```
@@ -107,7 +107,7 @@ struct IdArg {
     id: i64,
 }
 
-pub async fn get_user_by_id(user_id: i64) -> Result<User, uorm::error::DbError> {
+pub async fn get_user_by_id(user_id: i64) -> uorm::error::Result<User> {
     let mapper = U.mapper().expect("Driver not found");
     
     // execute 会根据 XML 定义的标签（select/insert/update/delete）自动执行。
@@ -135,14 +135,14 @@ struct UserDao;
 
 impl UserDao {
     #[sql("get_by_id")] // 对应 user.get_by_id
-    pub async fn get(id: i64) -> Result<User, uorm::error::DbError> {
+    pub async fn get(id: i64) -> uorm::error::Result<User> {
         // exec!() 是由 #[sql] 宏在函数内部注入的局部宏
         // 它会自动捕获函数参数、namespace 和 id 并执行调用
         exec!() 
     }
 
     #[sql(id = "list_all", database = "other_db")] // 可指定特定的数据库名称
-    pub async fn list_all() -> Result<Vec<User>, uorm::error::DbError> {
+    pub async fn list_all() -> uorm::error::Result<Vec<User>> {
         exec!()
     }
 }
@@ -162,7 +162,7 @@ struct UserParam<'a> {
     age: i32,
 }
 
-pub async fn add_user() -> Result<u64, uorm::error::DbError> {
+pub async fn add_user() -> uorm::error::Result<u64> {
     let session = U.session().expect("Default driver not found");
 
     // 支持 #{field} 语法绑定参数，内部会自动处理 SQL 注入防护
@@ -180,13 +180,12 @@ pub async fn add_user() -> Result<u64, uorm::error::DbError> {
 ### 自动事务宏 (`#[transaction]`)
 
 使用 `#[transaction]` 宏可以简化事务代码：它会在执行函数体前调用 `session.begin().await`，当函数返回 `Ok(_)` 时提交事务（`commit()`），返回 `Err(_)` 时回滚事务（`rollback()`）。
-该宏要求被标注的函数返回 `Result<T, E>`，并且 `E` 能从 `uorm::error::DbError` 转换（即满足 `E: From<DbError>`），以便将 `begin/commit` 的错误向外返回。
+该宏要求被标注的函数返回 `Result<T, E>`，并且 `E` 能从 `uorm::error::Error` 转换（即满足 `E: From<Error>`），以便将 `begin/commit` 的错误向外返回。
 
 ```rust
 use serde::Serialize;
 use uorm::driver_manager::U;
 use uorm::executor::session::Session;
-use uorm::error::DbError;
 
 #[derive(Serialize)]
 struct MyData {
@@ -195,7 +194,7 @@ struct MyData {
 }
 
 #[uorm::transaction]
-async fn transfer_data(session: &Session, data: &MyData) -> Result<(), DbError> {
+async fn transfer_data(session: &Session, data: &MyData) -> uorm::error::Result<()> {
     session
         .execute("INSERT INTO t(id, name) VALUES (#{id}, #{name})", data)
         .await?;

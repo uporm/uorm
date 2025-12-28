@@ -1,5 +1,6 @@
 use crate::tpl::cache;
-use anyhow::{Context, Result};
+use crate::error::DbError;
+use crate::Result;
 use dashmap::DashMap;
 use glob::glob;
 use quick_xml::events::{BytesStart, Event};
@@ -62,9 +63,13 @@ static STATEMENTS: OnceLock<StatementStore> = OnceLock::new();
 /// # Parameters
 /// * `pattern` - File path glob pattern, e.g. `"src/resources/**/*.xml"`.
 pub fn load(pattern: &str) -> Result<()> {
-    let paths = glob(pattern).with_context(|| format!("无效的 glob 模式: {}", pattern))?;
+    let paths = glob(pattern).map_err(|e| {
+        DbError::MapperLoadError(format!("无效的 glob 模式: {} - {}", pattern, e))
+    })?;
     for entry in paths {
-        let path = entry.with_context(|| format!("无法读取路径: {}", pattern))?;
+        let path: std::path::PathBuf = entry.map_err(|e: glob::GlobError| {
+            DbError::MapperLoadError(format!("无法读取路径: {} - {}", pattern, e))
+        })?;
         if path.is_file() {
             load_file(&path)?;
         }
@@ -114,8 +119,9 @@ pub fn clear() {
 // --- Internal implementation ---
 
 fn load_file(path: &Path) -> Result<()> {
-    let xml_content = fs::read_to_string(path)
-        .with_context(|| format!("读取 Mapper 文件失败: {}", path.display()))?;
+    let xml_content = fs::read_to_string(path).map_err(|e| {
+        DbError::MapperLoadError(format!("读取 Mapper 文件失败: {} (cause: {})", path.display(), e))
+    })?;
     parse_and_register(&xml_content, &path.display().to_string())
 }
 
@@ -123,7 +129,7 @@ fn parse_and_register(xml_content: &str, source: &str) -> Result<()> {
     let (namespace, items) = parse_xml(xml_content, source)?;
 
     let store = STATEMENTS.get_or_init(DashMap::new);
-    let ns_map = store.entry(namespace.clone()).or_default();
+    let ns_map = store.entry(namespace.clone()).or_insert_with(DashMap::new);
 
     for mut statement in items {
         if let Some(content) = &mut statement.content {
@@ -147,12 +153,12 @@ fn parse_and_register(xml_content: &str, source: &str) -> Result<()> {
             .iter()
             .any(|s| s.database_type == statement.database_type)
         {
-            anyhow::bail!(
+            return Err(DbError::MapperLoadError(format!(
                 "重复的 SQL ID 定义: '{}' (Database: '{:?}', Source: '{}')",
                 statement.id,
                 statement.database_type,
                 source
-            );
+            )));
         }
 
         statements.push(Arc::new(statement.into_sql_statement()));
@@ -201,8 +207,9 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                     namespace =
                         get_attribute(e, "namespace").or_else(|| get_attribute(e, "Namespace"));
                 } else if let Some(stmt_type) = StatementType::from_str(&name_str) {
-                    let id = get_attribute(e, "id")
-                        .ok_or_else(|| anyhow::anyhow!("SQL 语句缺少 id 属性: {}", source))?;
+                    let id = get_attribute(e, "id").ok_or_else(|| {
+                        DbError::MapperLoadError(format!("SQL 语句缺少 id 属性: {}", source))
+                    })?;
 
                     let database_type = get_attribute(e, "databaseType");
                     let use_generated_keys =
@@ -223,7 +230,7 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                     let tag_len = name.as_ref().len();
 
                     if end_pos < tag_len + 3 {
-                        anyhow::bail!("解析错误: 结束标签位置异常");
+                        return Err(DbError::MapperLoadError("解析错误: 结束标签位置异常".to_string()));
                     }
                     let content_end = end_pos - (tag_len + 3);
 
@@ -249,14 +256,15 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                 }
             }
             Ok(Event::Eof) => break,
-            Err(e) => anyhow::bail!("XML 解析错误: {} (Source: {})", e, source),
+            Err(e) => return Err(DbError::MapperLoadError(format!("XML 解析错误: {} (Source: {})", e, source))),
             _ => {}
         }
         buf.clear();
     }
 
-    let namespace =
-        namespace.ok_or_else(|| anyhow::anyhow!("Mapper XML 缺少 namespace 属性: {}", source))?;
+    let namespace = namespace.ok_or_else(|| {
+        DbError::MapperLoadError(format!("Mapper XML 缺少 namespace 属性: {}", source))
+    })?;
     Ok((namespace, items))
 }
 
@@ -282,8 +290,8 @@ fn read_until_end_tag(
                     depth -= 1;
                 }
             }
-            Ok(Event::Eof) => anyhow::bail!("未找到结束标签: </{}>", target_tag),
-            Err(e) => anyhow::bail!("XML 解析错误: {}", e),
+            Ok(Event::Eof) => return Err(DbError::MapperLoadError(format!("未找到结束标签: </{}>", target_tag))),
+            Err(e) => return Err(DbError::MapperLoadError(format!("XML 解析错误: {}", e))),
             _ => {}
         }
         buf.clear();

@@ -3,6 +3,7 @@ use std::sync::{Arc, LazyLock};
 use dashmap::DashMap;
 
 use crate::error::DbError;
+use crate::Result;
 use crate::executor::mapper::Mapper;
 use crate::executor::session::Session;
 use crate::udbc::DEFAULT_DB_NAME;
@@ -43,10 +44,10 @@ impl DriverManager {
     /// # Errors
     /// Returns an error if a driver with the same name (especially the default name)
     /// is already registered.
-    pub fn register(&self, driver: impl Driver + 'static) -> Result<(), DbError> {
+    pub fn register(&self, driver: impl Driver + 'static) -> Result<()> {
         let name = driver.name().to_string();
         if name == DEFAULT_DB_NAME && self.pools.contains_key(&name) {
-            return Err(DbError::General(format!(
+            return Err(DbError::DriverError(format!(
                 "Driver with name '{}' already registered",
                 name
             )));
@@ -61,9 +62,9 @@ impl DriverManager {
     ///
     /// # Arguments
     /// * `pattern` - A glob pattern (e.g., "resources/mappers/*.xml") to find mapper files.
-    pub fn assets(&self, pattern: &str) -> Result<(), DbError> {
+    pub fn assets(&self, pattern: &str) -> Result<()> {
         crate::mapper_loader::load(pattern).map_err(|e| {
-            DbError::General(format!("Failed to load mapper assets from pattern: {}", e))
+            DbError::MapperLoadError(format!("Failed to load mapper assets from pattern: {}", e))
         })
     }
 

@@ -4,6 +4,7 @@ use mysql_async::{Conn, Row as MyRow};
 use std::collections::HashMap;
 
 use crate::error::DbError;
+use crate::Result;
 use crate::udbc::connection::Connection;
 use crate::udbc::mysql::value_codec::{from_mysql_value, to_mysql_value};
 use crate::udbc::value::Value;
@@ -39,41 +40,51 @@ impl Connection for MysqlConnection {
         &mut self,
         sql: &str,
         args: &[(String, Value)],
-    ) -> Result<Vec<HashMap<String, Value>>, DbError> {
+    ) -> Result<Vec<HashMap<String, Value>>> {
         // Map args to positional params. Note: We ignore keys in args as mysql_async
         // expects Positional params for '?' placeholders.
         let params =
             mysql_async::Params::Positional(args.iter().map(|(_, v)| to_mysql_value(v)).collect());
 
-        let rows: Vec<MyRow> = self.conn.exec(sql, params).await?;
+        let rows: Vec<MyRow> = self.conn.exec(sql, params).await.map_err(|e| {
+            DbError::DbError(e.to_string())
+        })?;
         Ok(rows.into_iter().map(Self::map_row).collect())
     }
 
-    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64, DbError> {
+    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64> {
         let params =
             mysql_async::Params::Positional(args.iter().map(|(_, v)| to_mysql_value(v)).collect());
 
-        self.conn.exec_drop(sql, params).await?;
+        self.conn.exec_drop(sql, params).await.map_err(|e| {
+            DbError::DbError(e.to_string())
+        })?;
         Ok(self.conn.affected_rows())
     }
 
-    async fn last_insert_id(&mut self) -> Result<u64, DbError> {
+    async fn last_insert_id(&mut self) -> Result<u64> {
         // unwrap_or(0) handles cases where no insert happened or ID is unavailable
         Ok(self.conn.last_insert_id().unwrap_or(0))
     }
 
-    async fn begin(&mut self) -> Result<(), DbError> {
-        self.conn.query_drop("BEGIN").await?;
+    async fn begin(&mut self) -> Result<()> {
+        self.conn.query_drop("BEGIN").await.map_err(|e| {
+            DbError::DbError(e.to_string())
+        })?;
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DbError> {
-        self.conn.query_drop("COMMIT").await?;
+    async fn commit(&mut self) -> Result<()> {
+        self.conn.query_drop("COMMIT").await.map_err(|e| {
+            DbError::DbError(e.to_string())
+        })?;
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DbError> {
-        self.conn.query_drop("ROLLBACK").await?;
+    async fn rollback(&mut self) -> Result<()> {
+        self.conn.query_drop("ROLLBACK").await.map_err(|e| {
+            DbError::DbError(e.to_string())
+        })?;
         Ok(())
     }
 }

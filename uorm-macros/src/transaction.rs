@@ -26,7 +26,7 @@ pub fn transaction_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let block = &func.block;
 
-    // We assume the return type is Result<T, E> where E: From<DbError>
+    // We assume the return type is Result<T, E> where E: From<Error>
     // We use fully qualified paths where possible, but here we depend on the method availability on session_ident
 
     let new_block = quote! {

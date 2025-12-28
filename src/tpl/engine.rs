@@ -1,4 +1,5 @@
 use crate::error::DbError;
+use crate::Result;
 use crate::tpl::render::RenderBuffer;
 use crate::tpl::render_context::Context;
 use crate::tpl::{cache, render};
@@ -18,12 +19,14 @@ pub fn render_template<T: serde::Serialize>(
     template_content: &str,
     param: &T,
     driver: &dyn Driver,
-) -> Result<(String, Vec<(String, Value)>), DbError> {
+) -> Result<(String, Vec<(String, Value)>)> {
     // Retrieve the abstract syntax tree (AST) for the template, using a cache to avoid re-parsing.
     let ast = cache::get_ast(template_name, template_content);
 
     // Convert the provided parameters into a generic Value type for SQL execution.
-    let value = param.serialize(ValueSerializer)?;
+    let value = param.serialize(ValueSerializer).map_err(|e| {
+        DbError::SerializationError(format!("Serialization failed: {}", e))
+    })?;
 
     // Initialize the render buffer with estimated capacity to minimize reallocations.
     let mut buf = RenderBuffer {
@@ -46,7 +49,7 @@ pub fn render_template<T: serde::Serialize>(
 
 #[cfg(test)]
 mod tests {
-    use crate::error::DbError;
+    use crate::Result;
     use crate::tpl::engine::render_template;
     use crate::udbc::connection::Connection;
     use crate::udbc::driver::Driver;
@@ -67,10 +70,10 @@ mod tests {
         fn placeholder(&self, _seq: usize, _name: &str) -> String {
             "?".to_string()
         }
-        async fn acquire(&self) -> Result<Box<dyn Connection>, DbError> {
+        async fn acquire(&self) -> Result<Box<dyn Connection>> {
             todo!()
         }
-        async fn close(&self) -> Result<(), DbError> {
+        async fn close(&self) -> Result<()> {
             todo!()
         }
     }

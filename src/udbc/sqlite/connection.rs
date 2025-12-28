@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use rusqlite::params_from_iter;
 use std::collections::HashMap;
-
 use crate::error::DbError;
+use crate::Result;
 use crate::udbc::connection::Connection;
 use crate::udbc::sqlite::value_codec::{from_sqlite_value, to_sqlite_value};
 use crate::udbc::value::Value;
@@ -26,9 +26,9 @@ impl SqliteConnection {
     ///
     /// This method handles the boilerplate of moving the connection into a `spawn_blocking` task
     /// and moving it back after execution.
-    async fn run_blocking<F, T>(&mut self, f: F) -> Result<T, DbError>
+    async fn run_blocking<F, T>(&mut self, f: F) -> Result<T>
     where
-        F: FnOnce(&mut rusqlite::Connection) -> Result<T, rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut rusqlite::Connection) -> std::result::Result<T, rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
         // Take the connection from the struct.
@@ -36,22 +36,22 @@ impl SqliteConnection {
         let conn = self
             .conn
             .take()
-            .ok_or_else(|| DbError::Database("Connection closed".to_string()))?;
+            .ok_or_else(|| DbError::DbError("Connection closed".to_string()))?;
 
         // Spawn a blocking task to run the database operation.
-        let (conn, result) = tokio::task::spawn_blocking(move || {
+        let (conn, result): (rusqlite::Connection, std::result::Result<T, rusqlite::Error>) = tokio::task::spawn_blocking(move || -> (rusqlite::Connection, std::result::Result<T, rusqlite::Error>) {
             let mut conn = conn;
             let result = f(&mut conn);
             (conn, result)
         })
         .await
-        .map_err(|e| DbError::Database(format!("Task failed: {}", e)))?;
+        .map_err(|e: tokio::task::JoinError| DbError::DbError(format!("Task failed: {}", e)))?;
 
         // Put the connection back.
         self.conn = Some(conn);
 
         // Return the result of the database operation.
-        result.map_err(|e| DbError::Database(e.to_string()))
+        result.map_err(|e: rusqlite::Error| DbError::DbError(e.to_string()))
     }
 }
 
@@ -61,7 +61,7 @@ impl Connection for SqliteConnection {
         &mut self,
         sql: &str,
         args: &[(String, Value)],
-    ) -> Result<Vec<HashMap<String, Value>>, DbError> {
+    ) -> Result<Vec<HashMap<String, Value>>> {
         let sql = sql.to_string();
         // Convert arguments to SQLite values.
         let params = args
@@ -98,7 +98,7 @@ impl Connection for SqliteConnection {
         .await
     }
 
-    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64, DbError> {
+    async fn execute(&mut self, sql: &str, args: &[(String, Value)]) -> Result<u64> {
         let sql = sql.to_string();
         let params = args
             .iter()
@@ -112,7 +112,7 @@ impl Connection for SqliteConnection {
         .await
     }
 
-    async fn last_insert_id(&mut self) -> Result<u64, DbError> {
+    async fn last_insert_id(&mut self) -> Result<u64> {
         self.run_blocking(|conn| {
             let id = conn.last_insert_rowid();
             // Ensure non-negative ID, though rowid is usually i64.
@@ -121,7 +121,7 @@ impl Connection for SqliteConnection {
         .await
     }
 
-    async fn begin(&mut self) -> Result<(), DbError> {
+    async fn begin(&mut self) -> Result<()> {
         self.run_blocking(|conn| {
             conn.execute("BEGIN", [])?;
             Ok(())
@@ -129,7 +129,7 @@ impl Connection for SqliteConnection {
         .await
     }
 
-    async fn commit(&mut self) -> Result<(), DbError> {
+    async fn commit(&mut self) -> Result<()> {
         self.run_blocking(|conn| {
             conn.execute("COMMIT", [])?;
             Ok(())
@@ -137,7 +137,7 @@ impl Connection for SqliteConnection {
         .await
     }
 
-    async fn rollback(&mut self) -> Result<(), DbError> {
+    async fn rollback(&mut self) -> Result<()> {
         self.run_blocking(|conn| {
             conn.execute("ROLLBACK", [])?;
             Ok(())
