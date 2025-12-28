@@ -1757,7 +1757,7 @@ dependencies = [
 
 [[package]]
 name = "uorm-macros"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "glob",
  "proc-macro2",
