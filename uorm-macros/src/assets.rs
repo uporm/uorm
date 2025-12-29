@@ -58,13 +58,22 @@ pub fn mapper_assets_impl(input: TokenStream) -> TokenStream {
     dir.hash(&mut hasher);
     let fn_name = format_ident!("__uorm_auto_register_assets_{}", hasher.finish());
 
+    let pattern_lit = LitStr::new(&pattern_str, proc_macro2::Span::call_site());
+
     quote! {
         #[uorm::ctor::ctor(crate_path = ::uorm::ctor)]
         fn #fn_name() {
-            let assets = vec![
-                #(#assets),*
-            ];
-            uorm::mapper_loader::load_assets(assets).expect("Failed to load mapper assets");
+            #[cfg(debug_assertions)]
+            {
+                uorm::mapper_loader::load(#pattern_lit).expect("Failed to load mapper assets from disk");
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                let assets = vec![
+                    #(#assets),*
+                ];
+                uorm::mapper_loader::load_assets(assets).expect("Failed to load mapper assets");
+            }
         }
     }
     .into()

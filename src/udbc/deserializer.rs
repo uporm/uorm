@@ -174,9 +174,71 @@ impl<'de, 'a> Deserializer<'de> for ValueDeserializer<'a> {
         }
     }
 
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.value {
+            Value::I64(v) => visitor.visit_string(v.to_string()),
+            Value::I32(v) => visitor.visit_string(v.to_string()),
+            Value::I16(v) => visitor.visit_string(v.to_string()),
+            Value::U8(v) => visitor.visit_string(v.to_string()),
+            Value::F64(v) => visitor.visit_string(v.to_string()),
+            Value::Bool(v) => visitor.visit_string(v.to_string()),
+            Value::Decimal(v) => visitor.visit_string(v.to_string()),
+            Value::Date(v) => visitor.visit_string(v.to_string()),
+            Value::Time(v) => visitor.visit_string(v.to_string()),
+            Value::DateTime(v) => visitor.visit_string(v.to_string()),
+            Value::DateTimeUtc(v) => visitor.visit_string(v.to_rfc3339()),
+            _ => self.deserialize_any(visitor),
+        }
+    }
+
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        self.deserialize_string(visitor)
+    }
+
     serde::forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string
+        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char
         unit seq tuple tuple_struct enum identifier
         unit_struct newtype_struct bytes byte_buf
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+    use crate::udbc::value::Value;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_deserialize_int_to_string() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct TestStruct {
+            val: String,
+        }
+
+        let row = HashMap::from([
+            ("val".to_string(), Value::I64(12)),
+        ]);
+        
+        let deserializer = RowDeserializer::new(&row);
+        let result = TestStruct::deserialize(deserializer);
+        
+        // This is expected to succeed now
+        match result {
+            Ok(v) => {
+                println!("Deserialized: {:?}", v);
+                assert_eq!(v.val, "12");
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                panic!("Expected success, but got error: {}", e);
+            }
+        }
     }
 }
