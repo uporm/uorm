@@ -20,6 +20,12 @@ pub enum DbError {
     TemplateEngineError(String),
     #[error("SQL Execution Error: {0}")]
     SqlExecutionError(String),
+    #[error("Type Mismatch: {0}")]
+    TypeMismatch(String),
+    #[error("Missing Field: {0}")]
+    MissingField(String),
+    #[error("Custom Error: {0}")]
+    Custom(String),
 }
 
 // Aliases for compatibility

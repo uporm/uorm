@@ -1,9 +1,7 @@
 pub mod connection;
-pub(crate) mod deserializer;
 pub mod driver;
 #[cfg(feature = "mysql")]
 pub mod mysql;
-pub(crate) mod serializer;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 pub mod value;

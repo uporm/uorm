@@ -11,8 +11,11 @@ pub mod udbc;
 #[doc(hidden)]
 pub use ctor;
 pub use uorm_macros::mapper_assets;
+pub use uorm_macros::param;
+pub use uorm_macros::Param;
 pub use uorm_macros::sql;
 pub use uorm_macros::transaction;
+pub use udbc::value::{Value, ToValue, FromValue};
 use crate::error::DbError;
 
 pub type Result<T> = std::result::Result<T, DbError>;

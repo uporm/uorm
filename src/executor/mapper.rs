@@ -2,9 +2,8 @@ use crate::error::DbError;
 use crate::Result;
 use crate::executor::session::Session;
 use crate::mapper_loader::{SqlStatement, StatementType, find_statement};
-use crate::udbc::deserializer::ValueDeserializer;
 use crate::udbc::driver::Driver;
-use crate::udbc::value::Value;
+use crate::udbc::value::{FromValue, ToValue, Value};
 use std::sync::Arc;
 
 /// Mapper client encapsulating connection pool and SQL template execution.
@@ -34,14 +33,14 @@ impl Mapper {
     /// Executes a mapped SQL statement by ID.
     ///
     /// # Generic Parameters
-    /// * `R`: Return type. Must be deserializable from the query result.
+    /// * `R`: Return type. Must be convertible from a database value (supports both Serde and FromRow).
     ///   - For `Select`, `R` is typically `Vec<T>`.
     ///   - For `Insert`/`Update`/`Delete`, `R` is typically `u64` (affected rows) or `i64`.
     /// * `T`: Argument type. Must be serializable (passed to the template engine).
     pub async fn execute<R, T>(&self, sql_id: &str, args: &T) -> Result<R>
     where
-        T: serde::Serialize,
-        R: serde::de::DeserializeOwned,
+        T: ToValue,
+        R: FromValue,
     {
         let stmt = self.get_statement(sql_id)?;
         let sql = stmt
@@ -61,7 +60,7 @@ impl Mapper {
                 // or changing the Session API to return R directly.
                 // Given the current architecture, this is the safe approach.
                 let value = Value::List(rows.into_iter().map(Value::Map).collect());
-                Ok(R::deserialize(ValueDeserializer { value: &value })?)
+                Ok(R::from_value(value)?)
             }
             StatementType::Insert => {
                 let session = self.session();
@@ -73,15 +72,11 @@ impl Mapper {
                     affected as i64
                 };
 
-                Ok(R::deserialize(ValueDeserializer {
-                    value: &Value::I64(val),
-                })?)
+                Ok(R::from_value(Value::I64(val))?)
             }
             StatementType::Update | StatementType::Delete | StatementType::Sql => {
                 let affected = self.session().execute(sql, args).await?;
-                Ok(R::deserialize(ValueDeserializer {
-                    value: &Value::I64(affected as i64),
-                })?)
+                Ok(R::from_value(Value::I64(affected as i64))?)
             }
         }
     }

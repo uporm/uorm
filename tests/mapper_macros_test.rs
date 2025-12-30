@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use uorm::Param;
 use std::sync::Once;
 use uorm::driver_manager::U;
 use uorm::udbc::sqlite::pool::SqliteDriver;
 use uorm::{mapper_assets, sql};
 use uorm::Result;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Param)]
 struct User {
     id: Option<i64>,
     name: Option<String>,
@@ -14,7 +14,7 @@ struct User {
     create_time: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct InsertParams {
     name: String,
     age: i32,

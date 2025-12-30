@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use uorm::Param;
 use std::sync::Once;
 use uorm::driver_manager::U;
 use uorm::executor::mapper::Mapper;
 use uorm::udbc::connection::Connection;
 use uorm::udbc::sqlite::pool::SqliteDriver;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Param)]
 struct User {
     id: Option<i64>,
     name: Option<String>,
@@ -14,64 +14,64 @@ struct User {
     create_time: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct IdArg {
     id: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct NameAgeArg {
     name: String,
     age: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct UserDetailsArg {
     id: i64,
     full: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct SearchUsersArg {
     name: String,
     min_age: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct ActiveAdultsArg {
     active: bool,
     age: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct IdsArg {
     ids: Vec<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct UpdateAgeArg {
     id: i64,
     age: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct UpdateSelectiveArg {
     id: i64,
     name: Option<String>,
     age: Option<i32>,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct MaxAgeArg {
     max_age: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct UserArg {
     user: User,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct UsersArg {
     users: Vec<User>,
 }

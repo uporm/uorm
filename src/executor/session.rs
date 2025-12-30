@@ -4,7 +4,7 @@ use crate::executor::exec::{execute_conn, map_rows, query_conn};
 use crate::executor::transaction::TransactionContext;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
-use crate::udbc::value::Value;
+use crate::udbc::value::{FromValue, ToValue, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -112,11 +112,11 @@ impl Session {
     /// the template and executes it directly on a connection from the pool.
     pub async fn execute<T>(&self, sql: &str, args: &T) -> Result<u64>
     where
-        T: serde::Serialize,
+        T: ToValue,
     {
-        let key = self.pool.name().to_string();
+        let key = self.pool.name();
         // Check if there's an active transaction for this driver.
-        if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(&key).cloned()) {
+        if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(key).cloned()) {
             let mut ctx = tx.lock().await;
             if let Some(conn) = ctx.connection_mut() {
                 return execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
@@ -142,8 +142,8 @@ impl Session {
     /// A `Vec<R>` containing the deserialized results.
     pub async fn query<R, T>(&self, sql: &str, args: &T) -> Result<Vec<R>>
     where
-        T: serde::Serialize,
-        R: serde::de::DeserializeOwned,
+        T: ToValue,
+        R: FromValue,
     {
         let rows = self.query_raw(sql, args).await?;
         map_rows(rows)
@@ -158,10 +158,10 @@ impl Session {
         args: &T,
     ) -> Result<Vec<HashMap<String, Value>>>
     where
-        T: serde::Serialize,
+        T: ToValue,
     {
-        let key = self.pool.name().to_string();
-        if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(&key).cloned()) {
+        let key = self.pool.name();
+        if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(key).cloned()) {
             let mut ctx = tx.lock().await;
             if let Some(conn) = ctx.connection_mut() {
                 return query_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;

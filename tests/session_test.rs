@@ -1,17 +1,17 @@
-use serde::{Deserialize, Serialize};
+use uorm::Param;
 use std::sync::Arc;
 use uorm::executor::session::Session;
 use uorm::udbc::driver::Driver;
 use uorm::udbc::sqlite::pool::SqliteDriver;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Param)]
 struct User {
     id: Option<i64>,
     name: String,
     age: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Param)]
 struct NewUser {
     name: String,
     age: i32,

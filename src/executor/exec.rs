@@ -2,16 +2,14 @@ use crate::error::DbError;
 use crate::Result;
 use crate::tpl::engine;
 use crate::udbc::connection::Connection;
-use crate::udbc::deserializer::RowDeserializer;
 use crate::udbc::driver::Driver;
-use crate::udbc::value::Value;
+use crate::udbc::value::{FromValue, ToValue, Value};
 use log::debug;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::time::Instant;
 
 /// Executes a SQL statement (INSERT, UPDATE, DELETE) on the given connection.
-pub async fn execute_conn<T: Serialize>(
+pub async fn execute_conn<T: ToValue>(
     conn: &mut dyn Connection,
     driver: &dyn Driver,
     sql: &str,
@@ -37,7 +35,7 @@ pub async fn execute_conn<T: Serialize>(
 }
 
 /// Executes a SQL query on the given connection and returns raw rows.
-pub async fn query_conn<T: Serialize>(
+pub async fn query_conn<T: ToValue>(
     conn: &mut dyn Connection,
     driver: &dyn Driver,
     sql: &str,
@@ -68,12 +66,12 @@ pub async fn query_conn<T: Serialize>(
 /// Maps raw database rows to the target type `R`.
 pub fn map_rows<R>(rows: Vec<HashMap<String, Value>>) -> Result<Vec<R>>
 where
-    R: serde::de::DeserializeOwned,
+    R: FromValue,
 {
     rows.into_iter()
         .map(|r| {
-            R::deserialize(RowDeserializer::new(&r))
-                .map_err(|e| DbError::SerializationError(format!("Row mapping failed: {}", e)))
+            R::from_value(Value::Map(r))
+                .map_err(|e| DbError::SerializationError(format!("Row mapping failed: {:?}", e)))
         })
         .collect()
 }

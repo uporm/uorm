@@ -184,10 +184,17 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let async_token = quote! { async };
 
     // Determine the SQL ID: priority given to explicit `id`, then positional `value`, then function name.
-    let id = sql_args
+    let raw_id = sql_args
         .id
         .or(sql_args.value)
         .unwrap_or_else(|| fn_name.to_string());
+
+    // Check if raw_id contains a dot to infer namespace
+    let (inferred_namespace, final_id) = if let Some(idx) = raw_id.find('.') {
+        (Some(raw_id[..idx].to_string()), raw_id[idx+1..].to_string())
+    } else {
+        (None, raw_id)
+    };
 
     // Determine the database name, defaulting to "default".
     let db_name = sql_args.database.unwrap_or_else(|| "default".to_string());
@@ -198,6 +205,32 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let mut use_arg_directly = false;
     let mut direct_arg_ident = None;
+    
+    // Check for parameter mapping
+    let mut param_mappings = std::collections::HashMap::new();
+    let mut use_param_mapping = false;
+
+    for attr in &item_fn.attrs {
+        if attr.path().is_ident("uorm_internal_param_mapping") {
+            use_param_mapping = true;
+            if let Meta::List(meta_list) = &attr.meta {
+                 let nested = meta_list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated);
+                 if let Ok(metas) = nested {
+                     for meta in metas {
+                         if let Meta::NameValue(nv) = meta {
+                             if let Some(ident) = nv.path.get_ident() {
+                                 if let Expr::Lit(expr_lit) = &nv.value {
+                                     if let Lit::Str(lit_str) = &expr_lit.lit {
+                                         param_mappings.insert(ident.to_string(), lit_str.value());
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+            }
+        }
+    }
 
     // Check if we should unwrap a single struct argument
     let typed_args: Vec<&syn::PatType> = fn_args
@@ -211,7 +244,7 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    if typed_args.len() == 1 {
+    if !use_param_mapping && typed_args.len() == 1 {
         let arg = typed_args[0];
         if !is_primitive_or_wrapper(&arg.ty) {
             if let syn::Pat::Ident(pat_ident) = &*arg.pat {
@@ -221,7 +254,7 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
-    if !use_arg_directly {
+    if !use_arg_directly && !use_param_mapping {
         for arg in fn_args {
             if let syn::FnArg::Typed(pat_type) = arg
                 && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
@@ -244,7 +277,30 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
-    let (args_struct_def, args_struct_init) = if use_arg_directly {
+    let (args_struct_def, args_struct_init) = if use_param_mapping {
+        let mut inserts = Vec::new();
+        for arg in fn_args {
+            if let syn::FnArg::Typed(pat_type) = arg {
+                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
+                    let ident = &pat_ident.ident;
+                    let ident_str = ident.to_string();
+                    let key = param_mappings.get(&ident_str).cloned().unwrap_or(ident_str);
+                    inserts.push(quote! {
+                        __uorm_map.insert(#key.to_string(), uorm::udbc::value::ToValue::to_value(&#ident));
+                    });
+                }
+            }
+        }
+        
+        (
+            quote! {},
+            quote! {
+                let mut __uorm_map = std::collections::HashMap::new();
+                #(#inserts)*
+                let __uorm_args = uorm::udbc::value::Value::Map(__uorm_map);
+            },
+        )
+    } else if use_arg_directly {
         let ident = direct_arg_ident.unwrap();
         (
             quote! {},
@@ -255,19 +311,42 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     } else if struct_fields.is_empty() {
         (
             quote! {
-                #[derive(serde::Serialize)]
                 struct __UormMapperArgs;
+                impl uorm::udbc::value::ToValue for __UormMapperArgs {
+                    fn to_value(&self) -> uorm::udbc::value::Value {
+                        uorm::udbc::value::Value::Map(std::collections::HashMap::new())
+                    }
+                }
             },
             quote! {
                 let __uorm_args = __UormMapperArgs;
             },
         )
     } else {
+        let mut to_value_inserts = Vec::new();
+        for arg in fn_args {
+            if let syn::FnArg::Typed(pat_type) = arg
+                && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                let ident = &pat_ident.ident;
+                let ident_str = ident.to_string();
+                to_value_inserts.push(quote! {
+                     map.insert(#ident_str.to_string(), uorm::udbc::value::ToValue::to_value(&self.#ident));
+                });
+            }
+        }
+
         (
             quote! {
-                #[derive(serde::Serialize)]
                 struct __UormMapperArgs<'a> {
                     #(#struct_fields),*
+                }
+                impl<'a> uorm::udbc::value::ToValue for __UormMapperArgs<'a> {
+                    fn to_value(&self) -> uorm::udbc::value::Value {
+                        let mut map = std::collections::HashMap::new();
+                        #(#to_value_inserts)*
+                        uorm::udbc::value::Value::Map(map)
+                    }
                 }
             },
             quote! {
@@ -282,11 +361,14 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     // Note: The macro currently hardcodes 'execute', but the actual behavior
     // is often determined by the return type in more complex implementations.
     let method_ident = syn::Ident::new("execute", Span::call_site());
-    let id_lit = LitStr::new(&id, Span::call_site());
+    let id_lit = LitStr::new(&final_id, Span::call_site());
     let db_name_lit = LitStr::new(&db_name, Span::call_site());
 
     // Determine the namespace: either explicitly provided or retrieved from the struct's `NAMESPACE` constant.
     let namespace_tokens = if let Some(ns) = sql_args.namespace {
+        let ns_lit = LitStr::new(&ns, Span::call_site());
+        quote! { #ns_lit }
+    } else if let Some(ns) = inferred_namespace {
         let ns_lit = LitStr::new(&ns, Span::call_site());
         quote! { #ns_lit }
     } else {
