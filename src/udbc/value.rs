@@ -1,12 +1,14 @@
+use crate::error::DbError;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
-use crate::error::DbError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Null,
     Bool(bool),
+    Char(char),
+    Str(String),
     I8(i8),
     I16(i16),
     I32(i32),
@@ -19,8 +21,6 @@ pub enum Value {
     U128(u128),
     F32(f32),
     F64(f64),
-    Char(char),
-    Str(String),
     Bytes(Vec<u8>),
     /// Date without time zone
     Date(NaiveDate),
@@ -55,8 +55,7 @@ pub trait FromValue: Sized {
 }
 
 // --- 基础类型的宏实现 ---
-
-macro_rules! impl_primitive {
+macro_rules! impl_to_value_primitive {
     ($rust_type:ty, $variant:ident) => {
         impl ToValue for $rust_type {
             fn to_value(&self) -> Value {
@@ -71,96 +70,119 @@ macro_rules! impl_from_value_int {
         impl FromValue for $rust_type {
             fn from_value(v: Value) -> Result<Self, DbError> {
                 match v {
-                    Value::I8(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::I16(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::I32(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::I64(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::I128(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::U8(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::U16(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::U32(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::U64(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    Value::U128(n) => <$rust_type>::try_from(n).map_err(|_| DbError::TypeMismatch(format!("Value {} out of range for {}", n, stringify!($rust_type)))),
-                    _ => Err(DbError::TypeMismatch(format!("Expected numeric value, got {:?}", v))),
+                    Value::I8(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::I16(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::I32(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::I64(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::I128(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::U8(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::U16(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::U32(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::U64(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    Value::U128(n) => <$rust_type>::try_from(n).map_err(|_| {
+                        DbError::TypeMismatch(format!(
+                            "Value {} out of range for {}",
+                            n,
+                            stringify!($rust_type)
+                        ))
+                    }),
+                    _ => Err(DbError::TypeMismatch(format!(
+                        "Expected numeric value, got {:?}",
+                        v
+                    ))),
                 }
             }
         }
     };
 }
 
-// 批量实现基础类型
-impl_primitive!(i8, I8);
-impl_primitive!(i16, I16);
-impl_primitive!(i32, I32);
-impl_primitive!(i64, I64);
-impl_primitive!(i128, I128);
-impl_primitive!(u8, U8);
-impl_primitive!(u16, U16);
-impl_primitive!(u32, U32);
-impl_primitive!(u64, U64);
-impl_primitive!(u128, U128);
-
-impl_from_value_int!(i8);
-impl_from_value_int!(i16);
-impl_from_value_int!(i32);
-impl_from_value_int!(i64);
-impl_from_value_int!(i128);
-impl_from_value_int!(u8);
-impl_from_value_int!(u16);
-impl_from_value_int!(u32);
-impl_from_value_int!(u64);
-impl_from_value_int!(u128);
-
-impl_primitive!(f32, F32);
-impl FromValue for f32 {
+// bool 类型的特殊处理
+impl_to_value_primitive!(bool, Bool);
+impl FromValue for bool {
     fn from_value(v: Value) -> Result<Self, DbError> {
-        if let Value::F32(val) = v {
-            Ok(val)
-        } else if let Value::F64(val) = v {
-             Ok(val as f32)
-        } else {
-            Err(DbError::TypeMismatch(format!(
-                "Expected F32, got {:?}", v
-            )))
+        match v {
+            Value::Bool(b) => Ok(b),
+            // 生产级增强：支持从整数 0/1 转换
+            Value::I32(1) => Ok(true),
+            Value::I32(0) => Ok(false),
+            Value::I64(1) => Ok(true),
+            Value::I64(0) => Ok(false),
+            // 生产级增强：支持从字符串 "true"/"false" 转换
+            Value::Str(s) if s.to_lowercase() == "true" => Ok(true),
+            Value::Str(s) if s.to_lowercase() == "false" => Ok(false),
+            _ => Err(DbError::TypeMismatch(format!("Expected Bool, got {:?}", v))),
         }
     }
 }
 
-impl_primitive!(f64, F64);
-impl FromValue for f64 {
-    fn from_value(v: Value) -> Result<Self, DbError> {
-         if let Value::F64(val) = v {
-            Ok(val)
-        } else if let Value::F32(val) = v {
-             Ok(val as f64)
-        } else {
-            Err(DbError::TypeMismatch(format!(
-                "Expected F64, got {:?}", v
-            )))
-        }
-    }
-}
-
-impl_primitive!(char, Char);
+// char 类型的特殊处理
+impl_to_value_primitive!(char, Char);
 impl FromValue for char {
     fn from_value(v: Value) -> Result<Self, DbError> {
         if let Value::Char(val) = v {
             Ok(val)
         } else {
-            Err(DbError::TypeMismatch(format!(
-                "Expected Char, got {:?}", v
-            )))
+            Err(DbError::TypeMismatch(format!("Expected Char, got {:?}", v)))
         }
     }
 }
-// impl_primitive!(String, Str); // Removed default String implementation
 
-impl ToValue for String {
-    fn to_value(&self) -> Value {
-        Value::Str(self.clone())
-    }
-}
-
+// string 类型的特殊处理
+impl_to_value_primitive!(String, Str);
 impl FromValue for String {
     fn from_value(v: Value) -> Result<Self, DbError> {
         match v {
@@ -180,33 +202,61 @@ impl ToValue for &str {
     }
 }
 
+// 批量实现基础类型
+impl_to_value_primitive!(i8, I8);
+impl_to_value_primitive!(i16, I16);
+impl_to_value_primitive!(i32, I32);
+impl_to_value_primitive!(i64, I64);
+impl_to_value_primitive!(i128, I128);
+impl_to_value_primitive!(u8, U8);
+impl_to_value_primitive!(u16, U16);
+impl_to_value_primitive!(u32, U32);
+impl_to_value_primitive!(u64, U64);
+impl_to_value_primitive!(u128, U128);
+
+impl_from_value_int!(i8);
+impl_from_value_int!(i16);
+impl_from_value_int!(i32);
+impl_from_value_int!(i64);
+impl_from_value_int!(i128);
+impl_from_value_int!(u8);
+impl_from_value_int!(u16);
+impl_from_value_int!(u32);
+impl_from_value_int!(u64);
+impl_from_value_int!(u128);
+
+// float 类型的特殊处理
+impl_to_value_primitive!(f32, F32);
+impl FromValue for f32 {
+    fn from_value(v: Value) -> Result<Self, DbError> {
+        if let Value::F32(val) = v {
+            Ok(val)
+        } else if let Value::F64(val) = v {
+            Ok(val as f32)
+        } else {
+            Err(DbError::TypeMismatch(format!("Expected F32, got {:?}", v)))
+        }
+    }
+}
+
+// double 类型的特殊处理
+impl_to_value_primitive!(f64, F64);
+impl FromValue for f64 {
+    fn from_value(v: Value) -> Result<Self, DbError> {
+        if let Value::F64(val) = v {
+            Ok(val)
+        } else if let Value::F32(val) = v {
+            Ok(val as f64)
+        } else {
+            Err(DbError::TypeMismatch(format!("Expected F64, got {:?}", v)))
+        }
+    }
+}
+
 // Allow Value to be passed as argument
 impl ToValue for Value {
     fn to_value(&self) -> Value {
         self.clone()
-    }
-}
-
-impl ToValue for bool {
-    fn to_value(&self) -> Value {
-        Value::Bool(*self)
-    }
-}
-
-impl FromValue for bool {
-    fn from_value(v: Value) -> Result<Self, DbError> {
-        match v {
-            Value::Bool(b) => Ok(b),
-            // Some DBs return 0/1 for bool
-            Value::I8(n) => Ok(n != 0),
-            Value::I16(n) => Ok(n != 0),
-            Value::I32(n) => Ok(n != 0),
-            Value::I64(n) => Ok(n != 0),
-            _ => Err(DbError::TypeMismatch(format!(
-                "Expected Bool or number, got {:?}",
-                v
-            ))),
-        }
     }
 }
 
@@ -231,16 +281,14 @@ impl ToValue for () {
 }
 
 // Blanket implementation for references
-impl<'a, T> ToValue for &'a T
+impl<T> ToValue for &T
 where
-    T: ToValue,
+    T: ToValue + ?Sized,
 {
     fn to_value(&self) -> Value {
         (**self).to_value()
     }
 }
-
-// === 泛型容器实现 ===
 
 // Option
 impl<T: ToValue> ToValue for Option<T> {

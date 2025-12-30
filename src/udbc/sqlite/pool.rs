@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use std::str::FromStr;
 use std::time::Duration;
 
-use crate::error::DbError;
 use crate::Result;
+use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::sqlite::connection::SqliteConnection;
@@ -82,31 +82,23 @@ impl SqliteDriver {
             SqliteTarget::Memory => rusqlite::Connection::open_in_memory(),
             SqliteTarget::Path(p) => rusqlite::Connection::open(p),
         }
-        .map_err(|e| {
-            DbError::DbError(format!("Failed to open connection: {}", e))
-        })?;
+        .map_err(|e| DbError::DbError(format!("Failed to open connection: {}", e)))?;
 
         // Set busy_timeout FIRST to handle potential locks during PRAGMA execution
         if timeout_secs > 0 {
             conn.busy_timeout(Duration::from_secs(timeout_secs))
-                .map_err(|e| {
-                    DbError::DbError(format!("Failed to set busy_timeout: {}", e))
-                })?;
+                .map_err(|e| DbError::DbError(format!("Failed to set busy_timeout: {}", e)))?;
         }
 
         // Enforce foreign keys for data integrity
         conn.execute_batch("PRAGMA foreign_keys = ON;")
-            .map_err(|e| {
-                DbError::DbError(format!("Failed to set foreign_keys: {}", e))
-            })?;
+            .map_err(|e| DbError::DbError(format!("Failed to set foreign_keys: {}", e)))?;
 
         // WAL mode improves concurrency (readers don't block writers).
         // synchronous = NORMAL is safe for WAL and faster.
         // Note: Changing journal_mode requires a write lock on the database file.
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
-            .map_err(|e| {
-                DbError::DbError(format!("Failed to set journal_mode: {}", e))
-            })?;
+            .map_err(|e| DbError::DbError(format!("Failed to set journal_mode: {}", e)))?;
 
         Ok(conn)
     }

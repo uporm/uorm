@@ -1,9 +1,9 @@
-use crate::error::DbError;
 use crate::Result;
+use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::mysql::connection::MysqlConnection;
-use crate::udbc::{PoolOptions, DEFAULT_DB_NAME};
+use crate::udbc::{DEFAULT_DB_NAME, PoolOptions};
 use async_trait::async_trait;
 use mysql_async::{Opts, OptsBuilder, Pool, PoolConstraints, PoolOpts};
 use std::time::Duration;
@@ -54,8 +54,9 @@ impl MysqlDriver {
     /// - The connection URL is invalid.
     /// - Pool constraints are invalid (e.g., max_idle > max_open or max_open == 0).
     pub fn build(mut self) -> Result<Self> {
-        let opts = Opts::from_url(&self.url)
-            .map_err(|e| DbError::DbUrlError(format!("[{}] Invalid connection URL: {}", self.name, e)))?;
+        let opts = Opts::from_url(&self.url).map_err(|e| {
+            DbError::DbUrlError(format!("[{}] Invalid connection URL: {}", self.name, e))
+        })?;
 
         let mut builder = OptsBuilder::from_opts(opts);
 

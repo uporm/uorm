@@ -1,5 +1,5 @@
-use uorm::{sql, exec, Param};
 use uorm::error::DbError;
+use uorm::{Param, sql};
 
 #[derive(Debug, PartialEq, Param)]
 pub struct UserEntity {
@@ -31,7 +31,6 @@ impl UserDao {
 async fn test_param_vec_compilation() {
     // This test primarily checks if the code above compiles successfully.
     // The specific error [E0277] for Vec<UserEntity>: MapperResult would prevent compilation.
-    
+
     // We can also mock a runtime check if we had a DB, but compilation is the main point.
-    assert!(true);
 }

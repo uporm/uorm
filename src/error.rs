@@ -32,7 +32,6 @@ pub enum DbError {
 pub type Error = DbError;
 pub type SerdeError = DbError;
 
-
 impl serde::ser::Error for DbError {
     fn custom<T: std::fmt::Display>(msg: T) -> Self {
         DbError::SerializationError(msg.to_string())

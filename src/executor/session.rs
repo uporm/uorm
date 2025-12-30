@@ -1,5 +1,5 @@
-use crate::error::DbError;
 use crate::Result;
+use crate::error::DbError;
 use crate::executor::exec::{execute_conn, map_rows, query_conn};
 use crate::executor::transaction::TransactionContext;
 use crate::udbc::connection::Connection;
@@ -152,11 +152,7 @@ impl Session {
     /// Executes a SQL query and returns the results as a list of raw HashMaps.
     ///
     /// Each HashMap represents a row, mapping column names to their values.
-    pub async fn query_raw<T>(
-        &self,
-        sql: &str,
-        args: &T,
-    ) -> Result<Vec<HashMap<String, Value>>>
+    pub async fn query_raw<T>(&self, sql: &str, args: &T) -> Result<Vec<HashMap<String, Value>>>
     where
         T: ToValue,
     {

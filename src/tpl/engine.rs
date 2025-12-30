@@ -42,4 +42,3 @@ pub fn render_template<T: ToValue>(
 // pub fn remove_template(template_name: &str) {
 //     cache::TEMPLATE_CACHE.remove(template_name);
 // }
-

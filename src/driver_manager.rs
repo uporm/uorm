@@ -2,8 +2,8 @@ use std::sync::{Arc, LazyLock};
 
 use dashmap::DashMap;
 
-use crate::error::DbError;
 use crate::Result;
+use crate::error::DbError;
 use crate::executor::mapper::Mapper;
 use crate::executor::session::Session;
 use crate::udbc::DEFAULT_DB_NAME;

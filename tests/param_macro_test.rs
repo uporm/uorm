@@ -1,6 +1,6 @@
-use uorm::udbc::value::{ToValue, FromValue};
-use uorm::udbc::value::Value;
 use uorm::Param;
+use uorm::udbc::value::Value;
+use uorm::udbc::value::{FromValue, ToValue};
 
 #[derive(Debug, PartialEq, Param)]
 struct User {
@@ -17,10 +17,14 @@ fn test_param_struct_from_value() {
     let mut row = std::collections::HashMap::new();
     row.insert("id".to_string(), Value::I32(1));
     row.insert("name".to_string(), Value::Str("Alice".to_string()));
-    row.insert("custom_col".to_string(), Value::Str("CustomVal".to_string()));
-    row.insert("ignored".to_string(), Value::Str("ShouldBeIgnored".to_string()));
+    row.insert("customCol".to_string(), Value::Str("CustomVal".to_string()));
+    row.insert(
+        "ignored".to_string(),
+        Value::Str("ShouldBeIgnored".to_string()),
+    );
 
-    let user = <User as FromValue>::from_value(Value::Map(row)).expect("Failed to convert from value");
+    let user =
+        <User as FromValue>::from_value(Value::Map(row)).expect("Failed to convert from value");
 
     assert_eq!(user.id, 1);
     assert_eq!(user.name, "Alice");
@@ -38,16 +42,17 @@ fn test_param_struct_to_value() {
     };
 
     let val = user.to_value();
-    
+
     match val {
         Value::Map(map) => {
             // Note: Value types must match exactly what ToValue produces
             assert_eq!(map.get("id"), Some(&Value::I32(2)));
             assert_eq!(map.get("name"), Some(&Value::Str("Bob".to_string())));
             assert_eq!(map.get("custom_col"), Some(&Value::Str("Val".to_string())));
+            assert_eq!(map.get("customCol"), Some(&Value::Str("Val".to_string())));
             // ignored field should not be in the map
-            assert!(map.get("ignored").is_none());
-        },
+            assert!(!map.contains_key("ignored"));
+        }
         _ => panic!("Expected Value::Map"),
     }
 }

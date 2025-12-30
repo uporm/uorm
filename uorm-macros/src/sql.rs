@@ -191,7 +191,10 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Check if raw_id contains a dot to infer namespace
     let (inferred_namespace, final_id) = if let Some(idx) = raw_id.find('.') {
-        (Some(raw_id[..idx].to_string()), raw_id[idx+1..].to_string())
+        (
+            Some(raw_id[..idx].to_string()),
+            raw_id[idx + 1..].to_string(),
+        )
     } else {
         (None, raw_id)
     };
@@ -205,7 +208,7 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let mut use_arg_directly = false;
     let mut direct_arg_ident = None;
-    
+
     // Check for parameter mapping
     let mut param_mappings = std::collections::HashMap::new();
     let mut use_param_mapping = false;
@@ -214,20 +217,19 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         if attr.path().is_ident("uorm_internal_param_mapping") {
             use_param_mapping = true;
             if let Meta::List(meta_list) = &attr.meta {
-                 let nested = meta_list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated);
-                 if let Ok(metas) = nested {
-                     for meta in metas {
-                         if let Meta::NameValue(nv) = meta {
-                             if let Some(ident) = nv.path.get_ident() {
-                                 if let Expr::Lit(expr_lit) = &nv.value {
-                                     if let Lit::Str(lit_str) = &expr_lit.lit {
-                                         param_mappings.insert(ident.to_string(), lit_str.value());
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                 }
+                let nested =
+                    meta_list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated);
+                if let Ok(metas) = nested {
+                    for meta in metas {
+                        if let Meta::NameValue(nv) = meta
+                            && let Some(ident) = nv.path.get_ident()
+                            && let Expr::Lit(expr_lit) = &nv.value
+                            && let Lit::Str(lit_str) = &expr_lit.lit
+                        {
+                            param_mappings.insert(ident.to_string(), lit_str.value());
+                        }
+                    }
+                }
             }
         }
     }
@@ -246,11 +248,11 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
 
     if !use_param_mapping && typed_args.len() == 1 {
         let arg = typed_args[0];
-        if !is_primitive_or_wrapper(&arg.ty) {
-            if let syn::Pat::Ident(pat_ident) = &*arg.pat {
-                use_arg_directly = true;
-                direct_arg_ident = Some(&pat_ident.ident);
-            }
+        if !is_primitive_or_wrapper(&arg.ty)
+            && let syn::Pat::Ident(pat_ident) = &*arg.pat
+        {
+            use_arg_directly = true;
+            direct_arg_ident = Some(&pat_ident.ident);
         }
     }
 
@@ -280,18 +282,18 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let (args_struct_def, args_struct_init) = if use_param_mapping {
         let mut inserts = Vec::new();
         for arg in fn_args {
-            if let syn::FnArg::Typed(pat_type) = arg {
-                if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
-                    let ident = &pat_ident.ident;
-                    let ident_str = ident.to_string();
-                    let key = param_mappings.get(&ident_str).cloned().unwrap_or(ident_str);
-                    inserts.push(quote! {
-                        __uorm_map.insert(#key.to_string(), uorm::udbc::value::ToValue::to_value(&#ident));
-                    });
-                }
+            if let syn::FnArg::Typed(pat_type) = arg
+                && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                let ident = &pat_ident.ident;
+                let ident_str = ident.to_string();
+                let key = param_mappings.get(&ident_str).cloned().unwrap_or(ident_str);
+                inserts.push(quote! {
+                    __uorm_map.insert(#key.to_string(), uorm::udbc::value::ToValue::to_value(&#ident));
+                });
             }
         }
-        
+
         (
             quote! {},
             quote! {

@@ -1,11 +1,11 @@
-use async_trait::async_trait;
-use rusqlite::params_from_iter;
-use std::collections::HashMap;
-use crate::error::DbError;
 use crate::Result;
+use crate::error::DbError;
 use crate::udbc::connection::Connection;
 use crate::udbc::sqlite::value_codec::{from_sqlite_value, to_sqlite_value};
 use crate::udbc::value::Value;
+use async_trait::async_trait;
+use rusqlite::params_from_iter;
+use std::collections::HashMap;
 
 /// Connection implementation for SQLite.
 ///
@@ -28,7 +28,9 @@ impl SqliteConnection {
     /// and moving it back after execution.
     async fn run_blocking<F, T>(&mut self, f: F) -> Result<T>
     where
-        F: FnOnce(&mut rusqlite::Connection) -> std::result::Result<T, rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut rusqlite::Connection) -> std::result::Result<T, rusqlite::Error>
+            + Send
+            + 'static,
         T: Send + 'static,
     {
         // Take the connection from the struct.

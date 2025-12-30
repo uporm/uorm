@@ -1,9 +1,9 @@
-use uorm::Param;
 use std::sync::Once;
+use uorm::Param;
+use uorm::Result;
 use uorm::driver_manager::U;
 use uorm::udbc::sqlite::pool::SqliteDriver;
 use uorm::{mapper_assets, sql};
-use uorm::Result;
 
 #[derive(Debug, Param)]
 struct User {
@@ -30,7 +30,9 @@ impl UserDao {
     }
 
     #[sql("insert")]
-    pub async fn insert_map(params: std::collections::HashMap<String, String>) -> uorm::Result<i64> {
+    pub async fn insert_map(
+        params: std::collections::HashMap<String, String>,
+    ) -> uorm::Result<i64> {
         exec!()
     }
 
@@ -55,7 +57,7 @@ impl UserDao {
     }
 
     #[sql("update_age")]
-    pub async fn update_age(id: i64, age: i32) -> Result<u64> {     
+    pub async fn update_age(id: i64, age: i32) -> Result<u64> {
         exec!()
     }
 
@@ -116,21 +118,27 @@ async fn test_user_dao_macros() {
         age: 22,
     };
     let _ = UserDao::insert_struct(params).await.unwrap();
-    
+
     // Verify insertion
     let users = UserDao::list_all().await.unwrap();
-    let user = users.iter().find(|u| u.name.as_deref() == Some("AliceStruct")).expect("AliceStruct not found");
+    let user = users
+        .iter()
+        .find(|u| u.name.as_deref() == Some("AliceStruct"))
+        .expect("AliceStruct not found");
     assert_eq!(user.age, Some(22));
 
     // 1.3 Test insert_map
     let mut map = std::collections::HashMap::new();
     map.insert("name".to_string(), "AliceMap".to_string());
-    map.insert("age".to_string(), "23".to_string()); 
+    map.insert("age".to_string(), "23".to_string());
     let _ = UserDao::insert_map(map).await.unwrap();
 
     // Verify insertion
     let users = UserDao::list_all().await.unwrap();
-    let user = users.iter().find(|u| u.name.as_deref() == Some("AliceMap")).expect("AliceMap not found");
+    let user = users
+        .iter()
+        .find(|u| u.name.as_deref() == Some("AliceMap"))
+        .expect("AliceMap not found");
     // SQLite might return 23 as i32 even if inserted as string, due to column affinity.
     // But let's check.
     assert_eq!(user.age, Some(23));

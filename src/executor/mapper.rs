@@ -1,5 +1,5 @@
-use crate::error::DbError;
 use crate::Result;
+use crate::error::DbError;
 use crate::executor::session::Session;
 use crate::mapper_loader::{SqlStatement, StatementType, find_statement};
 use crate::udbc::driver::Driver;
@@ -43,15 +43,14 @@ impl Mapper {
         R: FromValue,
     {
         let stmt = self.get_statement(sql_id)?;
-        let sql = stmt
-            .as_ref()
-            .content
-            .as_deref()
-            .ok_or_else(|| DbError::TemplateEngineError(format!("SQL content empty for {}", sql_id)))?;
+        let sql = stmt.as_ref().content.as_deref().ok_or_else(|| {
+            DbError::TemplateEngineError(format!("SQL content empty for {}", sql_id))
+        })?;
 
         match stmt.r#type {
             StatementType::Select => {
-                let rows: Vec<std::collections::HashMap<String, Value>> = self.session().query_raw(sql, args).await?;
+                let rows: Vec<std::collections::HashMap<String, Value>> =
+                    self.session().query_raw(sql, args).await?;
 
                 // Performance Note:
                 // We convert Vec<HashMap> -> Value::List(Vec<Value::Map>) -> R.

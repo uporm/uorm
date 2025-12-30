@@ -1,5 +1,5 @@
-use uorm::Param;
 use std::sync::Arc;
+use uorm::Param;
 use uorm::executor::session::Session;
 use uorm::udbc::driver::Driver;
 use uorm::udbc::sqlite::pool::SqliteDriver;

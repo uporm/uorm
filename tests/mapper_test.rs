@@ -1,5 +1,5 @@
-use uorm::Param;
 use std::sync::Once;
+use uorm::Param;
 use uorm::driver_manager::U;
 use uorm::executor::mapper::Mapper;
 use uorm::udbc::connection::Connection;

@@ -1,7 +1,7 @@
+use crate::Result;
 use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use std::sync::Arc;
-use crate::Result;
 
 pub(crate) struct TransactionContext {
     conn: Option<Box<dyn Connection>>,
