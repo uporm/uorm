@@ -51,6 +51,16 @@ impl UserDao {
         exec!()
     }
 
+    #[sql("get_by_id")]
+    pub async fn get_one_by_id(id: i64) -> Result<User> {
+        exec!()
+    }
+
+    #[sql("get_by_id")]
+    pub async fn get_option_by_id(id: i64) -> Result<Option<User>> {
+        exec!()
+    }
+
     #[sql("list_all")]
     pub async fn list_all() -> Result<Vec<User>> {
         exec!()
@@ -148,6 +158,16 @@ async fn test_user_dao_macros() {
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name.as_deref(), Some("Alice"));
     assert_eq!(users[0].age, Some(20));
+
+    let user = UserDao::get_one_by_id(1).await.unwrap();
+    assert_eq!(user.name.as_deref(), Some("Alice"));
+    assert_eq!(user.age, Some(20));
+
+    let missing = UserDao::get_option_by_id(999).await.unwrap();
+    assert!(missing.is_none());
+
+    let missing_err = UserDao::get_one_by_id(999).await.unwrap_err();
+    assert!(matches!(missing_err, uorm::error::DbError::DbError(_)));
 
     // 3. Test list_all
     UserDao::insert("Bob".to_string(), 30).await.unwrap();

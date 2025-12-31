@@ -52,14 +52,46 @@ impl Mapper {
                 let rows: Vec<std::collections::HashMap<String, Value>> =
                     self.session().query_raw_named(sql_id, sql, args).await?;
 
-                // Performance Note:
-                // We convert Vec<HashMap> -> Value::List(Vec<Value::Map>) -> R.
-                // This intermediate step allocates. Optimizing this would require
-                // a custom Deserializer that accepts Vec<HashMap> directly,
-                // or changing the Session API to return R directly.
-                // Given the current architecture, this is the safe approach.
-                let value = Value::List(rows.into_iter().map(Value::Map).collect());
-                Ok(R::from_value(value)?)
+                match rows.len() {
+                    0 => {
+                        let list_value = Value::List(Vec::new());
+                        if let Ok(v) = R::from_value(list_value) {
+                            return Ok(v);
+                        }
+                        if let Ok(v) = R::from_value(Value::Null) {
+                            return Ok(v);
+                        }
+                        Err(DbError::DbError(format!("No rows returned for {}", sql_id)))
+                    }
+                    1 => {
+                        let row = rows.into_iter().next().unwrap();
+
+                        let list_value = Value::List(vec![Value::Map(row.clone())]);
+                        match R::from_value(list_value) {
+                            Ok(v) => Ok(v),
+                            Err(list_err) => {
+                                let map_value = Value::Map(row.clone());
+                                if let Ok(v) = R::from_value(map_value) {
+                                    return Ok(v);
+                                }
+
+                                if row.len() == 1 {
+                                    let (_, only_val) = row.into_iter().next().unwrap();
+                                    match R::from_value(only_val) {
+                                        Ok(v) => return Ok(v),
+                                        Err(e) => return Err(e),
+                                    }
+                                }
+
+                                Err(list_err)
+                            }
+                        }
+                    }
+                    _ => {
+                        let value = Value::List(rows.into_iter().map(Value::Map).collect());
+                        Ok(R::from_value(value)?)
+                    }
+                }
             }
             StatementType::Insert => {
                 let session = self.session();

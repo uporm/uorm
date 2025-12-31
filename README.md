@@ -24,7 +24,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.6.1"
+uorm = "0.6.4"
 ```
 
 ### 特性开关 (Features)
@@ -35,7 +35,7 @@ uorm = "0.6.1"
 ```toml
 [dependencies]
 # 仅启用 MySQL 支持
-uorm = { version = "0.6.1", default-features = false, features = ["mysql"] }
+uorm = { version = "0.6.4", default-features = false, features = ["mysql"] }
 ```
 
 ## 快速开始
@@ -114,6 +114,27 @@ pub async fn get_user_by_id(user_id: i64) -> uorm::Result<Option<User>> {
     // execute 会根据 XML 定义的标签（select/insert/update/delete）自动执行。
     // 对于 select，如果结果只有一行且返回类型是结构体而非 Vec，会自动解包（Unwrap）。
     mapper.execute("user.get_by_id", &IdArg { id: user_id }).await
+}
+```
+
+### 4) 基本类型返回 (Scalar Return)
+
+除了返回结构体或 `Vec`，`execute` 也支持直接返回基本类型（如 `i64`, `String`, `f64` 等）及其 `Option` 包装。适用于 `count(*)`、`max(column)` 等聚合查询。
+
+```rust
+pub async fn scalar_example() -> uorm::Result<()> {
+    let mapper = U.mapper().expect("Driver not found");
+
+    // 返回单个整数 (例如 count(*))
+    let count: i64 = mapper.execute("user.count", &()).await?;
+
+    // 返回单个字符串 (例如 max(name))
+    let name: String = mapper.execute("user.max_name", &()).await?;
+
+    // 返回 Option (处理可能为空的结果)
+    let max_id: Option<i64> = mapper.execute("user.max_id", &()).await?;
+    
+    Ok(())
 }
 ```
 
