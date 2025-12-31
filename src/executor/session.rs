@@ -7,6 +7,8 @@ use crate::udbc::driver::Driver;
 use crate::udbc::value::{FromValue, ToValue, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -14,6 +16,12 @@ type TransactionContextMap = HashMap<String, Arc<Mutex<TransactionContext>>>;
 
 thread_local! {
     static TX_CONTEXT: RefCell<TransactionContextMap> = RefCell::new(HashMap::new());
+}
+
+fn inline_template_name(sql: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    sql.hash(&mut hasher);
+    format!("__inline__:{:x}", hasher.finish())
 }
 
 /// Database session wrapper managing connection pools and transaction state.
@@ -114,12 +122,21 @@ impl Session {
     where
         T: ToValue,
     {
+        let template_name = inline_template_name(sql);
+        self.execute_named(&template_name, sql, args).await
+    }
+
+    pub async fn execute_named<T>(&self, template_name: &str, sql: &str, args: &T) -> Result<u64>
+    where
+        T: ToValue,
+    {
         let key = self.pool.name();
         // Check if there's an active transaction for this driver.
         if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(key).cloned()) {
             let mut ctx = tx.lock().await;
             if let Some(conn) = ctx.connection_mut() {
-                return execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
+                return execute_conn(conn.as_mut(), self.pool.as_ref(), template_name, sql, args)
+                    .await;
             } else {
                 return Err(DbError::DbError(
                     "Transaction connection closed".to_string(),
@@ -129,7 +146,7 @@ impl Session {
 
         // No active transaction, render template and execute on a new connection.
         let mut conn: Box<dyn Connection> = self.pool.acquire().await?;
-        execute_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await
+        execute_conn(conn.as_mut(), self.pool.as_ref(), template_name, sql, args).await
     }
 
     /// Executes a SQL query and maps the resulting rows to a collection of type `R`.
@@ -156,11 +173,25 @@ impl Session {
     where
         T: ToValue,
     {
+        let template_name = inline_template_name(sql);
+        self.query_raw_named(&template_name, sql, args).await
+    }
+
+    pub async fn query_raw_named<T>(
+        &self,
+        template_name: &str,
+        sql: &str,
+        args: &T,
+    ) -> Result<Vec<HashMap<String, Value>>>
+    where
+        T: ToValue,
+    {
         let key = self.pool.name();
         if let Some(tx) = TX_CONTEXT.with(|map| map.borrow().get(key).cloned()) {
             let mut ctx = tx.lock().await;
             if let Some(conn) = ctx.connection_mut() {
-                return query_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await;
+                return query_conn(conn.as_mut(), self.pool.as_ref(), template_name, sql, args)
+                    .await;
             } else {
                 return Err(DbError::DbError(
                     "Transaction connection closed".to_string(),
@@ -169,7 +200,7 @@ impl Session {
         }
 
         let mut conn: Box<dyn Connection> = self.pool.acquire().await?;
-        query_conn(conn.as_mut(), self.pool.as_ref(), sql, args).await
+        query_conn(conn.as_mut(), self.pool.as_ref(), template_name, sql, args).await
     }
 
     /// Retrieves the ID of the last inserted row.

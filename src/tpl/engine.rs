@@ -34,7 +34,7 @@ pub fn render_template<T: ToValue>(
 
     // Set up the rendering context and execute the rendering process.
     let mut ctx = Context::new(&value);
-    render::render(&ast, &mut ctx, &mut buf);
+    render::render(template_name, &ast, &mut ctx, &mut buf);
 
     Ok((buf.sql, buf.params))
 }
@@ -42,3 +42,75 @@ pub fn render_template<T: ToValue>(
 // pub fn remove_template(template_name: &str) {
 //     cache::TEMPLATE_CACHE.remove(template_name);
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tpl::cache;
+    use crate::udbc::connection::Connection;
+    use async_trait::async_trait;
+
+    struct TestDriver;
+
+    #[async_trait]
+    impl Driver for TestDriver {
+        fn name(&self) -> &str {
+            "test"
+        }
+
+        fn r#type(&self) -> &str {
+            "test"
+        }
+
+        fn placeholder(&self, _param_seq: usize, _param_name: &str) -> String {
+            "?".to_string()
+        }
+
+        async fn acquire(&self) -> Result<Box<dyn Connection>> {
+            Err(crate::error::DbError::DbError("not supported".to_string()))
+        }
+
+        async fn close(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn include_is_resolved_by_current_namespace_first() {
+        cache::TEMPLATE_CACHE.clear();
+
+        cache::get_ast("a.cols", "id, name");
+        cache::get_ast("b.cols", "id, email");
+        cache::get_ast("cols", "WRONG");
+
+        let driver = TestDriver;
+        let (sql, _params) = render_template(
+            "a.main",
+            "select <include refid=\"cols\"/> from t",
+            &(),
+            &driver,
+        )
+        .unwrap();
+        assert!(sql.contains("id, name"));
+        assert!(!sql.contains("WRONG"));
+
+        let (sql, _params) = render_template(
+            "b.main",
+            "select <include refid=\"cols\"/> from t",
+            &(),
+            &driver,
+        )
+        .unwrap();
+        assert!(sql.contains("id, email"));
+        assert!(!sql.contains("WRONG"));
+
+        let (sql, _params) = render_template(
+            "a.main2",
+            "select <include refid=\"b.cols\"/> from t",
+            &(),
+            &driver,
+        )
+        .unwrap();
+        assert!(sql.contains("id, email"));
+    }
+}

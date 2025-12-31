@@ -50,7 +50,7 @@ impl Mapper {
         match stmt.r#type {
             StatementType::Select => {
                 let rows: Vec<std::collections::HashMap<String, Value>> =
-                    self.session().query_raw(sql, args).await?;
+                    self.session().query_raw_named(sql_id, sql, args).await?;
 
                 // Performance Note:
                 // We convert Vec<HashMap> -> Value::List(Vec<Value::Map>) -> R.
@@ -63,7 +63,7 @@ impl Mapper {
             }
             StatementType::Insert => {
                 let session = self.session();
-                let affected = session.execute(sql, args).await?;
+                let affected = session.execute_named(sql_id, sql, args).await?;
 
                 let val = if stmt.use_generated_keys {
                     session.last_insert_id().await? as i64
@@ -74,7 +74,7 @@ impl Mapper {
                 Ok(R::from_value(Value::I64(val))?)
             }
             StatementType::Update | StatementType::Delete | StatementType::Sql => {
-                let affected = self.session().execute(sql, args).await?;
+                let affected = self.session().execute_named(sql_id, sql, args).await?;
                 Ok(R::from_value(Value::I64(affected as i64))?)
             }
         }

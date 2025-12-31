@@ -102,7 +102,31 @@ pub fn eval_expr(expr: &Expr, ctx: &Context) -> bool {
     }
 }
 
-pub(crate) fn render(nodes: &[AstNode], ctx: &mut Context, buf: &mut RenderBuffer) {
+fn resolve_include_key(current_template_name: &str, refid: &str) -> Option<String> {
+    if refid.contains('.') {
+        return Some(refid.to_string());
+    }
+
+    if let Some((ns, _)) = current_template_name.rsplit_once('.') {
+        let candidate = format!("{}.{}", ns, refid);
+        if TEMPLATE_CACHE.contains_key(&candidate) {
+            return Some(candidate);
+        }
+    }
+
+    if TEMPLATE_CACHE.contains_key(refid) {
+        return Some(refid.to_string());
+    }
+
+    None
+}
+
+pub(crate) fn render(
+    template_name: &str,
+    nodes: &[AstNode],
+    ctx: &mut Context,
+    buf: &mut RenderBuffer,
+) {
     for node in nodes {
         match node {
             AstNode::Text(t) => buf.push_sql(t),
@@ -114,13 +138,15 @@ pub(crate) fn render(nodes: &[AstNode], ctx: &mut Context, buf: &mut RenderBuffe
                     .push_str(&buf.driver.placeholder(buf.param_count, name));
             }
             AstNode::Include { refid } => {
-                if let Some(cached) = TEMPLATE_CACHE.get(refid) {
-                    render(&cached.ast, ctx, buf);
+                if let Some(key) = resolve_include_key(template_name, refid)
+                    && let Some(cached) = TEMPLATE_CACHE.get(&key)
+                {
+                    render(&key, &cached.ast, ctx, buf);
                 }
             }
             AstNode::If { test, body } => {
                 if eval_expr(test, ctx) {
-                    render(body, ctx, buf);
+                    render(template_name, body, ctx, buf);
                 }
             }
             AstNode::Foreach {
@@ -146,7 +172,7 @@ pub(crate) fn render(nodes: &[AstNode], ctx: &mut Context, buf: &mut RenderBuffe
                     }
 
                     ctx.push(item, v);
-                    render(body, ctx, buf);
+                    render(template_name, body, ctx, buf);
                     ctx.pop();
                 }
                 buf.sql.push_str(close);

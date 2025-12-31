@@ -143,10 +143,6 @@ fn parse_and_register(xml_content: &str, source: &str) -> Result<()> {
         if let Some(content) = &statement.content {
             let full_id = format!("{}.{}", namespace, statement.id);
             cache::get_ast(&full_id, content);
-            // Also register with short id for local includes
-            if !cache::TEMPLATE_CACHE.contains_key(&statement.id) {
-                cache::get_ast(&statement.id, content);
-            }
         }
 
         let mut statements = ns_map.entry(statement.id.clone()).or_default();

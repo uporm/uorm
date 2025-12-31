@@ -12,11 +12,12 @@ use std::time::Instant;
 pub async fn execute_conn<T: ToValue>(
     conn: &mut dyn Connection,
     driver: &dyn Driver,
+    template_name: &str,
     sql: &str,
     args: &T,
 ) -> Result<u64> {
     let start = Instant::now();
-    let (rendered_sql, params) = engine::render_template(sql, sql, args, driver)?;
+    let (rendered_sql, params) = engine::render_template(template_name, sql, args, driver)?;
     let result = conn.execute(&rendered_sql, &params).await;
     let elapsed = start.elapsed().as_millis();
 
@@ -38,11 +39,12 @@ pub async fn execute_conn<T: ToValue>(
 pub async fn query_conn<T: ToValue>(
     conn: &mut dyn Connection,
     driver: &dyn Driver,
+    template_name: &str,
     sql: &str,
     args: &T,
 ) -> Result<Vec<HashMap<String, Value>>> {
     let start = Instant::now();
-    let (rendered_sql, params) = engine::render_template(sql, sql, args, driver)?;
+    let (rendered_sql, params) = engine::render_template(template_name, sql, args, driver)?;
     let result: Result<Vec<HashMap<String, Value>>> = conn.query(&rendered_sql, &params).await;
     let elapsed = start.elapsed().as_millis();
 
