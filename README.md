@@ -24,7 +24,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.6.4"
+uorm = "0.6.5"
 ```
 
 ### 特性开关 (Features)
@@ -35,7 +35,7 @@ uorm = "0.6.4"
 ```toml
 [dependencies]
 # 仅启用 MySQL 支持
-uorm = { version = "0.6.4", default-features = false, features = ["mysql"] }
+uorm = { version = "0.6.5", default-features = false, features = ["mysql"] }
 ```
 
 ## 快速开始
@@ -295,8 +295,8 @@ async fn manual_transaction() -> uorm::Result<()> {
   </select>
 
   <!-- 插入并获取自增 ID -->
-  <!-- 当 useGeneratedKeys 为 true 时，execute 将返回最后插入的 ID -->
-  <insert id="insert_user" useGeneratedKeys="true" keyColumn="id">
+  <!-- 当 returnKey 为 true 时，execute 将返回最后插入的 ID -->
+  <insert id="insert_user" returnKey="true">
     INSERT INTO users(name, age) VALUES (#{name}, #{age})
   </insert>
 </mapper>

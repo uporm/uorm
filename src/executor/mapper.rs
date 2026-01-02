@@ -95,19 +95,43 @@ impl Mapper {
             }
             StatementType::Insert => {
                 let session = self.session();
-                let affected = session.execute_named(sql_id, sql, args).await?;
 
-                let val = if stmt.use_generated_keys {
-                    session.last_insert_id().await? as i64
+                let val = if stmt.return_key {
+                    let is_active = session.is_transaction_active();
+                    if is_active {
+                        let _ = session.execute_named(sql_id, sql, args).await?;
+                        let id = session.last_insert_id().await?;
+                        Value::U64(id)
+                    } else {
+                        // Use transaction to ensure same connection for insert and last_insert_id
+                        session.begin().await?;
+                        let result = async {
+                            let _ = session.execute_named(sql_id, sql, args).await?;
+                            session.last_insert_id().await
+                        }
+                        .await;
+
+                        match result {
+                            Ok(id) => {
+                                session.commit().await?;
+                                Value::U64(id)
+                            }
+                            Err(e) => {
+                                session.rollback().await?;
+                                return Err(e);
+                            }
+                        }
+                    }
                 } else {
-                    affected as i64
+                    let affected = session.execute_named(sql_id, sql, args).await?;
+                    Value::U64(affected)
                 };
 
-                Ok(R::from_value(Value::I64(val))?)
+                Ok(R::from_value(val)?)
             }
             StatementType::Update | StatementType::Delete | StatementType::Sql => {
                 let affected = self.session().execute_named(sql_id, sql, args).await?;
-                Ok(R::from_value(Value::I64(affected as i64))?)
+                Ok(R::from_value(Value::U64(affected))?)
             }
         }
     }

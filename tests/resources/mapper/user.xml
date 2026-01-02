@@ -28,6 +28,11 @@
     INSERT INTO users(name, age) VALUES (#{name}, #{age})
   </insert>
 
+  <!-- Insert returning generated key -->
+  <insert id="insert_return_key" returnKey="true">
+    INSERT INTO users(name, age) VALUES (#{name}, #{age})
+  </insert>
+
   <!-- Insert with object property access -->
   <insert id="insert_user">
     INSERT INTO users(id, name, age) VALUES (#{user.id}, #{user.name}, #{user.age})

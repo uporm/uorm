@@ -8,6 +8,7 @@ use crate::udbc::connection::Connection;
 use crate::udbc::driver::Driver;
 use crate::udbc::sqlite::connection::SqliteConnection;
 use crate::udbc::{DEFAULT_DB_NAME, PoolOptions};
+use rusqlite::OpenFlags;
 
 const SQLITE_TYPE: &str = "sqlite";
 
@@ -80,7 +81,12 @@ impl SqliteDriver {
     fn open_connection(target: &SqliteTarget, timeout_secs: u64) -> Result<rusqlite::Connection> {
         let conn = match target {
             SqliteTarget::Memory => rusqlite::Connection::open_in_memory(),
-            SqliteTarget::Path(p) => rusqlite::Connection::open(p),
+            SqliteTarget::Path(p) => {
+                let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+                    | OpenFlags::SQLITE_OPEN_CREATE
+                    | OpenFlags::SQLITE_OPEN_URI;
+                rusqlite::Connection::open_with_flags(p, flags)
+            }
         }
         .map_err(|e| DbError::DbError(format!("Failed to open connection: {}", e)))?;
 

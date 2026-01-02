@@ -43,10 +43,8 @@ pub struct SqlStatement {
     pub database_type: Option<String>,
     /// SQL template content (may contain dynamic XML tags).
     pub content: Option<String>,
-    /// Whether to use database-generated keys.
-    pub use_generated_keys: bool,
-    /// Primary key column name.
-    pub key_column: Option<String>,
+    /// Whether to return the generated key.
+    pub return_key: bool,
 }
 
 /// Statement repository.
@@ -167,8 +165,7 @@ struct ParsedItem {
     r#type: StatementType,
     id: String,
     database_type: Option<String>,
-    use_generated_keys: bool,
-    key_column: Option<String>,
+    return_key: bool,
     content: Option<String>,
 }
 
@@ -178,8 +175,7 @@ impl ParsedItem {
             r#type: self.r#type,
             database_type: self.database_type,
             content: self.content,
-            use_generated_keys: self.use_generated_keys,
-            key_column: self.key_column,
+            return_key: self.return_key,
         }
     }
 }
@@ -209,9 +205,8 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                     })?;
 
                     let database_type = get_attribute(e, "databaseType");
-                    let use_generated_keys =
-                        parse_bool(get_attribute(e, "useGeneratedKeys").as_deref());
-                    let key_column = get_attribute(e, "keyColumn");
+                    let return_key =
+                        parse_bool(get_attribute(e, "returnKey").as_deref());
 
                     // Use the end of the start tag as the content start position.
                     let start_pos = reader.buffer_position() as usize;
@@ -248,8 +243,7 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                         r#type: stmt_type,
                         id,
                         database_type,
-                        use_generated_keys,
-                        key_column,
+                        return_key,
                         content,
                     });
                 }

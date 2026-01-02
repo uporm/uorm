@@ -85,16 +85,22 @@ fn init_logger() {
     });
 }
 
-async fn setup_mapper(db_name: &str) -> (Mapper, Box<dyn Connection>) {
+async fn setup_mapper(base_name: &str) -> (Mapper, Box<dyn Connection>) {
     init_logger();
 
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let db_name = format!("{}_{}", base_name, timestamp);
+
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", db_name);
-    let driver = SqliteDriver::new(url).name(db_name).build().unwrap();
+    let driver = SqliteDriver::new(url).name(&db_name).build().unwrap();
 
     // Register the driver to U
     U.register(driver).unwrap();
 
-    let mapper = U.mapper_by_name(db_name).unwrap();
+    let mapper = U.mapper_by_name(&db_name).unwrap();
 
     // Create table using a temporary connection from the mapper's pool
     let mut conn = mapper.pool.acquire().await.unwrap();
@@ -143,6 +149,69 @@ async fn test_simple_select() {
     let users: Vec<User> = mapper.execute("user.list_all", &()).await.unwrap();
     println!("List all result: {:?}", users);
     assert_eq!(users.len(), 1);
+}
+
+#[tokio::test]
+async fn test_insert_return_key() {
+    let (mapper, _conn) = setup_mapper("insert_return_key").await;
+
+    // Test insert with returnKey=true
+    let id: i64 = mapper
+        .execute(
+            "user.insert_return_key",
+            &NameAgeArg {
+                name: "Eve".to_string(),
+                age: 28,
+            },
+        )
+        .await
+        .unwrap();
+
+    println!("Inserted ID: {}", id);
+    assert!(id > 0);
+
+    // Verify retrieval
+    let users: Vec<User> = mapper
+        .execute("user.get_by_id", &IdArg { id })
+        .await
+        .unwrap();
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name.as_deref(), Some("Eve"));
+}
+
+#[tokio::test]
+async fn test_insert_return_key_in_transaction() {
+    let (mapper, _conn) = setup_mapper("insert_return_key_tx").await;
+
+    // Start a manual transaction
+    let session = uorm::driver_manager::U.session_by_name(mapper.pool.name()).unwrap();
+    session.begin().await.unwrap();
+
+    // Test insert with returnKey=true inside transaction
+    let id: i64 = mapper
+        .execute(
+            "user.insert_return_key",
+            &NameAgeArg {
+                name: "Frank".to_string(),
+                age: 40,
+            },
+        )
+        .await
+        .unwrap();
+
+    println!("Inserted ID inside TX: {}", id);
+    assert!(id > 0);
+
+    // Commit transaction
+    session.commit().await.unwrap();
+
+    // Verify retrieval
+    let users: Vec<User> = mapper
+        .execute("user.get_by_id", &IdArg { id })
+        .await
+        .unwrap();
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name.as_deref(), Some("Frank"));
 }
 
 #[tokio::test]

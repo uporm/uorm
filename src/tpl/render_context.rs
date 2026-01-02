@@ -64,9 +64,7 @@ impl<'a> Context<'a> {
 
         // 2. Search root object
         if let Value::Map(m) = self.root {
-            if let Some(v) = m.get(key) {
-                return Some(v);
-            }
+            return m.get(key);
         }
 
         None

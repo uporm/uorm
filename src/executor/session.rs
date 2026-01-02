@@ -106,6 +106,11 @@ impl Session {
         Ok(())
     }
 
+    pub fn is_transaction_active(&self) -> bool {
+        let key = self.pool.name().to_string();
+        TX_CONTEXT.with(|tx| tx.borrow().contains_key(&key))
+    }
+
     /// Executes a SQL statement (e.g., INSERT, UPDATE, DELETE) that modifies data.
     ///
     /// # Arguments
