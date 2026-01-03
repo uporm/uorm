@@ -23,11 +23,11 @@ pub async fn execute_conn<T: ToValue>(
 
     match &result {
         Ok(affected) => debug!(
-            "Execute: sql={}, params={:?}, elapsed={}ms, affected={}",
+            "Execute: sql=\n{}, params={:?}, elapsed={}ms, affected={}",
             &rendered_sql, &params, elapsed, affected
         ),
         Err(e) => debug!(
-            "Execute: sql={}, params={:?}, elapsed={}ms, error={:?}",
+            "Execute: sql=\n{}, params={:?}, elapsed={}ms, error={:?}",
             &rendered_sql, &params, elapsed, e
         ),
     }
@@ -50,14 +50,14 @@ pub async fn query_conn<T: ToValue>(
 
     match &result {
         Ok(rows) => debug!(
-            "Query: sql={}, params={:?}, elapsed={}ms, rows={}",
+            "Query: sql=\n{}, params={:?}, elapsed={}ms, rows={}",
             &rendered_sql,
             &params,
             elapsed,
             rows.len()
         ),
         Err(e) => debug!(
-            "Query: sql={}, params={:?}, elapsed={}ms, error={:?}",
+            "Query: sql=\n{}, params={:?}, elapsed={}ms, error={:?}",
             &rendered_sql, &params, elapsed, e
         ),
     }

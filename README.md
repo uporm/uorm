@@ -14,7 +14,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 - 📦 **类型安全**：通过 `#[derive(Param)]` 自动处理参数绑定与结果映射。
 - ⚡ **异步优先**：基于 `tokio` 运行时，全程支持 `async/await`，适配高并发场景。
 - 🔧 **灵活配置**：支持多数据源管理、连接池优化、超时设置及事务控制。
-- 🛠️ **过程宏增强**：提供 `#[sql]`、`#[transaction]` 及 `mapper_assets!` 等宏，极大简化开发工作。
+- 🛠️ **过程宏增强**：提供 `#[sql]`、`#[uorm::transaction]` / `#[transaction]` 及 `mapper_assets!` 等宏，极大简化开发工作。
 - 🗄️ **多数据库支持**：原生支持 SQLite 和 MySQL，架构易于扩展至其他 UDBC 驱动。
 - 📝 **详细日志**：集成 `log` crate，提供 SQL 执行、耗时及参数详情，便于调试。
 
@@ -24,7 +24,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.6.5"
+uorm = "0.7.1"
 ```
 
 ### 特性开关 (Features)
@@ -35,7 +35,7 @@ uorm = "0.6.5"
 ```toml
 [dependencies]
 # 仅启用 MySQL 支持
-uorm = { version = "0.6.5", default-features = false, features = ["mysql"] }
+uorm = { version = "0.7.1", default-features = false, features = ["mysql"] }
 ```
 
 ## 快速开始
@@ -143,7 +143,7 @@ pub async fn scalar_example() -> uorm::Result<()> {
 使用 `#[sql]` 宏可以像定义 DAO 接口一样操作数据库，代码更加优雅。
 
 ```rust
-use uorm::{exec, sql, Param, Result};
+use uorm::{sql, Param, Result};
 
 #[derive(Debug, Param)]
 struct User {
@@ -163,7 +163,7 @@ impl UserDao {
     }
 
     #[sql(id = "list_all", database = "other_db")] // 可指定特定的数据库名称
-    pub async fn list_all() -> uorm::error::Result<Vec<User>> {
+    pub async fn list_all() -> Result<Vec<User>> {
         exec!()
     }
 }
@@ -198,16 +198,15 @@ pub async fn add_user() -> uorm::Result<u64> {
 
 ## 事务管理
 
-### 自动事务宏 (`#[transaction]`)
+### 自动事务宏 (`#[uorm::transaction]`)
 
-使用 `#[transaction]` 宏可以简化事务代码：它会在执行函数体前调用 `session.begin().await`，当函数返回 `Ok(_)` 时提交事务（`commit()`），返回 `Err(_)` 时回滚事务（`rollback()`）。
+使用 `#[transaction]` 宏可以简化事务代码：它会在执行函数体前尝试开启事务，当函数返回 `Ok(_)` 时提交事务（`commit()`），返回 `Err(_)` 时回滚事务（`rollback()`）。如果当前线程已存在同库的事务上下文（例如嵌套调用），宏不会重复开启/提交事务。
 该宏要求被标注的函数返回 `Result<T, E>`，并且 `E` 能从 `uorm::error::Error` 转换（即满足 `E: From<Error>`），以便将 `begin/commit` 的错误向外返回。注意：回滚失败会被忽略并优先返回原始业务错误。
 
 另外，事务上下文基于线程局部存储（TLS）。在 tokio 多线程运行时下，任务可能跨线程恢复执行；如需严格保证同一事务内共享同一连接，请使用单线程运行时或确保任务固定在线程上执行。
 
 ```rust
 use uorm::driver_manager::U;
-use uorm::executor::session::Session;
 use uorm::Param;
 
 #[derive(Param)]
@@ -217,7 +216,8 @@ struct MyData {
 }
 
 #[uorm::transaction]
-async fn transfer_data(session: &Session, data: &MyData) -> uorm::Result<()> {
+async fn transfer_data(data: &MyData) -> uorm::Result<()> {
+    let session = U.session().expect("Default driver not found");
     session
         .execute("INSERT INTO t(id, name) VALUES (#{id}, #{name})", data)
         .await?;
@@ -232,9 +232,9 @@ struct IdArg {
     id: i64,
 }
 
-#[uorm::transaction]
+#[uorm::transaction(database = "other_db")]
 async fn custom_session_name() -> uorm::Result<()> {
-    let session = U.session().expect("Default driver not found");
+    let session = U.session_by_name("other_db").expect("Database driver not found");
     session.execute("DELETE FROM t WHERE id = #{id}", &IdArg { id: 1 })
         .await?;
     Ok(())

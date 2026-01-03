@@ -31,6 +31,24 @@ pub struct Session {
     pool: Arc<dyn Driver>,
 }
 
+pub trait TransactionResult: Sized {
+    fn is_ok(&self) -> bool;
+    fn from_db_error(err: DbError) -> Self;
+}
+
+impl<T, E> TransactionResult for std::result::Result<T, E>
+where
+    E: From<DbError>,
+{
+    fn is_ok(&self) -> bool {
+        self.is_ok()
+    }
+
+    fn from_db_error(err: DbError) -> Self {
+        Err(err.into())
+    }
+}
+
 impl Session {
     pub fn new(pool: Arc<dyn Driver>) -> Self {
         Self { pool }

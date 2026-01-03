@@ -1,19 +1,31 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn, LitStr, Result, parse::Parse, parse::ParseStream, parse_macro_input};
+use syn::{
+    Expr, ItemFn, Lit, LitStr, Meta, Result, Token, parse::Parse, parse::ParseStream,
+    parse_macro_input, punctuated::Punctuated,
+};
 
 struct TransactionArgs {
-    session_name: Option<String>,
+    database: Option<String>,
 }
 
 impl Parse for TransactionArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut session_name = None;
+        let mut database = None;
         if !input.is_empty() {
-            let s: LitStr = input.parse()?;
-            session_name = Some(s.value());
+            let metas: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(input)?;
+            for meta in metas {
+                if let Meta::NameValue(nv) = meta
+                    && let Some(ident) = nv.path.get_ident()
+                    && ident == "database"
+                    && let Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(lit_str) = &expr_lit.lit
+                {
+                    database = Some(lit_str.value());
+                }
+            }
         }
-        Ok(TransactionArgs { session_name })
+        Ok(TransactionArgs { database })
     }
 }
 
@@ -21,40 +33,37 @@ pub fn transaction_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as TransactionArgs);
     let mut func = parse_macro_input!(input as ItemFn);
 
-    let session_name = args.session_name.unwrap_or_else(|| "session".to_string());
-    let session_ident = syn::Ident::new(&session_name, proc_macro2::Span::call_site());
-
     let block = &func.block;
 
-    // We assume the return type is Result<T, E> where E: From<Error>
-    // We use fully qualified paths where possible, but here we depend on the method availability on session_ident
-
+    let db_name = args.database.unwrap_or_else(|| "default".to_string());
+    let db_name_lit = LitStr::new(&db_name, proc_macro2::Span::call_site());
     let new_block = quote! {
         {
-            // Start transaction
-            match #session_ident.begin().await {
-                Ok(_) => {},
-                Err(e) => return Err(e.into()),
+            let __uorm_mapper = uorm::driver_manager::U
+                .mapper_by_name(#db_name_lit)
+                .expect("Database driver not found");
+            let __uorm_session = uorm::executor::session::Session::new(__uorm_mapper.pool.clone());
+
+            let __uorm_tx_started = !__uorm_session.is_transaction_active();
+            if __uorm_tx_started {
+                if let Err(e) = __uorm_session.begin().await {
+                    return uorm::TransactionResult::from_db_error(e);
+                }
             }
 
-            // Execute original body
             let result = (async #block).await;
 
-            match result {
-                Ok(val) => {
-                     // Commit if successful
-                     match #session_ident.commit().await {
-                         Ok(_) => Ok(val),
-                         Err(e) => Err(e.into()),
-                     }
-                }
-                Err(e) => {
-                     // Rollback if error
-                     // We ignore rollback errors as we want to return the original error
-                     let _ = #session_ident.rollback().await;
-                     Err(e)
+            if __uorm_tx_started {
+                if uorm::TransactionResult::is_ok(&result) {
+                    if let Err(e) = __uorm_session.commit().await {
+                        return uorm::TransactionResult::from_db_error(e);
+                    }
+                } else {
+                    let _ = __uorm_session.rollback().await;
                 }
             }
+
+            result
         }
     };
 

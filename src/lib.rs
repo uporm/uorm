@@ -10,6 +10,7 @@ pub mod udbc;
 use crate::error::DbError;
 #[doc(hidden)]
 pub use ctor;
+pub use executor::session::TransactionResult;
 pub use udbc::value::{FromValue, ToValue, Value};
 pub use uorm_macros::Param;
 pub use uorm_macros::mapper_assets;
