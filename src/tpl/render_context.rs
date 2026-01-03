@@ -189,14 +189,17 @@ mod tests {
     fn test_lookup_nested_camel_to_snake() {
         let mut sub = HashMap::new();
         sub.insert("first_name".to_string(), Value::Str("John".to_string()));
-        
+
         let mut map = HashMap::new();
         map.insert("user_profile".to_string(), Value::Map(sub));
-        
+
         let root = Value::Map(map);
         let ctx = Context::new(&root);
 
         // "userProfile.firstName" -> "user_profile" -> "first_name"
-        assert_eq!(ctx.lookup("userProfile.firstName"), &Value::Str("John".to_string()));
+        assert_eq!(
+            ctx.lookup("userProfile.firstName"),
+            &Value::Str("John".to_string())
+        );
     }
 }

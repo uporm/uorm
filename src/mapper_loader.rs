@@ -205,8 +205,7 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                     })?;
 
                     let database_type = get_attribute(e, "databaseType");
-                    let return_key =
-                        parse_bool(get_attribute(e, "returnKey").as_deref());
+                    let return_key = parse_bool(get_attribute(e, "returnKey").as_deref());
 
                     // Use the end of the start tag as the content start position.
                     let start_pos = reader.buffer_position() as usize;

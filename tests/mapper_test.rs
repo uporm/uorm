@@ -184,7 +184,9 @@ async fn test_insert_return_key_in_transaction() {
     let (mapper, _conn) = setup_mapper("insert_return_key_tx").await;
 
     // Start a manual transaction
-    let session = uorm::driver_manager::U.session_by_name(mapper.pool.name()).unwrap();
+    let session = uorm::driver_manager::U
+        .session_by_name(mapper.pool.name())
+        .unwrap();
     session.begin().await.unwrap();
 
     // Test insert with returnKey=true inside transaction

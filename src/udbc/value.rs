@@ -303,6 +303,16 @@ impl<T: FromValue> FromValue for Option<T> {
     fn from_value(v: Value) -> Result<Self, DbError> {
         match v {
             Value::Null => Ok(None),
+            Value::List(l) => {
+                if let Ok(v) = T::from_value(Value::List(l.clone())) {
+                    return Ok(Some(v));
+                }
+                if l.is_empty() {
+                    return Ok(None);
+                }
+                let first = l.into_iter().next().unwrap();
+                Ok(Some(T::from_value(first)?))
+            }
             _ => Ok(Some(T::from_value(v)?)),
         }
     }

@@ -13,12 +13,12 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.5"
+version = "0.7.0"
 edition = "2024"
 
 
 [dependencies]
-uorm-macros = { version = "0.6.5", path = "uorm-macros" }
+uorm-macros = { version = "0.7.0", path = "uorm-macros" }
 serde = { version = "1.0.228", features = ["derive"] }
 quick-xml = { version = "0.38.4", features = ["serialize"] }
 dashmap = "7.0.0-rc2"

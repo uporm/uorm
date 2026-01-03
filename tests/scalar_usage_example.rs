@@ -1,30 +1,42 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
 use uorm::Result;
+use uorm::executor::mapper::Mapper;
+use uorm::mapper_loader;
 use uorm::udbc::connection::Connection;
 use uorm::udbc::driver::Driver;
 use uorm::udbc::value::Value;
-use uorm::executor::mapper::Mapper;
-use uorm::mapper_loader;
 
 // --- 1. 定义 Mock Driver (模拟数据库行为) ---
 struct MockDriver;
 #[async_trait]
 impl Driver for MockDriver {
-    fn name(&self) -> &str { "mock" }
-    fn r#type(&self) -> &str { "mock" }
-    fn placeholder(&self, _: usize, _: &str) -> String { "?".to_string() }
+    fn name(&self) -> &str {
+        "mock"
+    }
+    fn r#type(&self) -> &str {
+        "mock"
+    }
+    fn placeholder(&self, _: usize, _: &str) -> String {
+        "?".to_string()
+    }
     async fn acquire(&self) -> Result<Box<dyn Connection>> {
         Ok(Box::new(MockConnection))
     }
-    async fn close(&self) -> Result<()> { Ok(()) }
+    async fn close(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 struct MockConnection;
 #[async_trait]
 impl Connection for MockConnection {
-    async fn query(&mut self, sql: &str, _args: &[(String, Value)]) -> Result<Vec<HashMap<String, Value>>> {
+    async fn query(
+        &mut self,
+        sql: &str,
+        _args: &[(String, Value)],
+    ) -> Result<Vec<HashMap<String, Value>>> {
         // 根据 SQL 模拟不同的返回值
         if sql.contains("count") {
             // 模拟返回 count(*) = 100
@@ -44,14 +56,24 @@ impl Connection for MockConnection {
             row.insert("val".to_string(), Value::Null);
             return Ok(vec![row]);
         }
-        
+
         Ok(vec![])
     }
-    async fn execute(&mut self, _sql: &str, _args: &[(String, Value)]) -> Result<u64> { Ok(0) }
-    async fn last_insert_id(&mut self) -> Result<u64> { Ok(0) }
-    async fn begin(&mut self) -> Result<()> { Ok(()) }
-    async fn commit(&mut self) -> Result<()> { Ok(()) }
-    async fn rollback(&mut self) -> Result<()> { Ok(()) }
+    async fn execute(&mut self, _sql: &str, _args: &[(String, Value)]) -> Result<u64> {
+        Ok(0)
+    }
+    async fn last_insert_id(&mut self) -> Result<u64> {
+        Ok(0)
+    }
+    async fn begin(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 // --- 2. 测试用例演示 ---
@@ -81,7 +103,7 @@ async fn example_scalar_return() -> Result<()> {
         </select>
     </mapper>
     "#;
-    
+
     // 加载 Mapper
     mapper_loader::load_assets(vec![("example.xml", xml)])?;
 
@@ -130,7 +152,7 @@ async fn example_scalar_return() -> Result<()> {
     pub async fn get_user_count() -> uorm::Result<i64> {
         exec!()
     }
-    
+
     调用 get_user_count().await? 将直接返回 i64 类型的 100
     */
 
