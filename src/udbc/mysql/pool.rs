@@ -60,6 +60,11 @@ impl MysqlDriver {
 
         let mut builder = OptsBuilder::from_opts(opts);
 
+        // Enable TCP keepalive by default (60s) to prevent connection drop during inactivity
+        // This is crucial for handling scenarios like computer sleep or long idle times
+        // where the server or intermediate firewalls might drop the connection silently.
+        builder = builder.tcp_keepalive(Some(60_000u32));
+
         if let Some(options) = &self.options {
             // Validate basic constraints: max_open_conns must be > 0
             if options.max_open_conns == 0 {
