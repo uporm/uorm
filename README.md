@@ -11,7 +11,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 - 🚀 **MyBatis 风格**：支持熟悉的 XML Mapper 语法，通过 `namespace.id` 唯一定位 SQL。
 - 🎯 **动态 SQL**：支持 `<if>`、`<foreach>`、`<include>` 等标签，轻松构建复杂 SQL。
-- 📦 **类型安全**：通过 `#[derive(Param)]` 自动处理参数绑定与结果映射。
+- 📦 **类型安全**：通过 `#[derive(Param)]` 自动处理参数绑定与结果映射，支持 `#[param]` 属性重命名或忽略字段。
 - ⚡ **异步优先**：基于 `tokio` 运行时，全程支持 `async/await`，适配高并发场景。
 - 🔧 **灵活配置**：支持多数据源管理、连接池优化、超时设置及事务控制。
 - 🛠️ **过程宏增强**：提供 `#[sql]`、`#[uorm::transaction]` / `#[transaction]` 及 `mapper_assets!` 等宏，极大简化开发工作。
@@ -24,7 +24,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.7.1"
+uorm = "0.7.3"
 ```
 
 ### 特性开关 (Features)
@@ -35,7 +35,7 @@ uorm = "0.7.1"
 ```toml
 [dependencies]
 # 仅启用 MySQL 支持
-uorm = { version = "0.7.1", default-features = false, features = ["mysql"] }
+uorm = { version = "0.7.3", default-features = false, features = ["mysql"] }
 ```
 
 ## 快速开始

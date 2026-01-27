@@ -28,6 +28,11 @@
     INSERT INTO users(name, age) VALUES (#{name}, #{age})
   </insert>
 
+  <!-- Insert with date -->
+  <insert id="insert_with_date">
+    INSERT INTO users(name, age, create_time) VALUES (#{name}, #{age}, #{create_time})
+  </insert>
+
   <!-- Insert returning generated key -->
   <insert id="insert_return_key" returnKey="true">
     INSERT INTO users(name, age) VALUES (#{name}, #{age})
@@ -54,6 +59,11 @@
   <!-- Select all -->
   <select id="list_all">
     SELECT <include refid="cols"/> FROM users ORDER BY id
+  </select>
+
+  <!-- Select all with full columns -->
+  <select id="list_all_full">
+    SELECT <include refid="all_cols"/> FROM users ORDER BY id
   </select>
 
   <!-- Select with simple if condition -->
@@ -88,6 +98,12 @@
   </select>
 
   <!-- Select with IN clause using foreach -->
+  <select id="sum_age">
+    SELECT sum(age) as age_sum FROM users
+  </select>
+  <select id="sum_age_group_by_name">
+    SELECT name, sum(age) as age_sum FROM users GROUP BY name ORDER BY name
+  </select>
   <select id="list_by_ids">
     SELECT <include refid="cols"/> FROM users WHERE id IN
     <foreach item="id" collection="ids" open="(" separator="," close=")">

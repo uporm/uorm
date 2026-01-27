@@ -71,19 +71,23 @@ impl Mapper {
                             Ok(v) => Ok(v),
                             Err(list_err) => {
                                 let map_value = Value::Map(row.clone());
-                                if let Ok(v) = R::from_value(map_value) {
-                                    return Ok(v);
-                                }
-
-                                if row.len() == 1 {
-                                    let (_, only_val) = row.into_iter().next().unwrap();
-                                    match R::from_value(only_val) {
-                                        Ok(v) => return Ok(v),
-                                        Err(e) => return Err(e),
+                                match R::from_value(map_value) {
+                                    Ok(v) => return Ok(v),
+                                    Err(map_err) => {
+                                        if row.len() == 1 {
+                                            let (_, only_val) = row.into_iter().next().unwrap();
+                                            match R::from_value(only_val) {
+                                                Ok(v) => return Ok(v),
+                                                Err(_) => {
+                                                     // If single value mapping also fails, return the map mapping error
+                                                     // because that's likely what the user intended (mapping to a struct)
+                                                     return Err(map_err);
+                                                }
+                                            }
+                                        }
+                                        return Err(map_err);
                                     }
                                 }
-
-                                Err(list_err)
                             }
                         }
                     }

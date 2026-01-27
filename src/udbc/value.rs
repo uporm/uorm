@@ -140,6 +140,26 @@ macro_rules! impl_from_value_int {
                             stringify!($rust_type)
                         ))
                     }),
+                    Value::Bytes(b) => {
+                        let s = String::from_utf8(b.clone())
+                            .map_err(|e| DbError::TypeMismatch(format!("Invalid UTF-8 bytes: {}", e)))?;
+                        s.parse::<$rust_type>().map_err(|e| {
+                            DbError::TypeMismatch(format!(
+                                "Cannot parse bytes {:?} as {}: {}",
+                                b,
+                                stringify!($rust_type),
+                                e
+                            ))
+                        })
+                    },
+                    Value::Str(s) => s.parse::<$rust_type>().map_err(|e| {
+                        DbError::TypeMismatch(format!(
+                            "Cannot parse string {:?} as {}: {}",
+                            s,
+                            stringify!($rust_type),
+                            e
+                        ))
+                    }),
                     _ => Err(DbError::TypeMismatch(format!(
                         "Expected numeric value, got {:?}",
                         v
@@ -189,6 +209,14 @@ impl FromValue for String {
             Value::Str(s) => Ok(s),
             Value::Bytes(b) => String::from_utf8(b)
                 .map_err(|e| DbError::TypeMismatch(format!("Invalid UTF-8 bytes: {}", e))),
+            Value::Date(d) => Ok(d.to_string()),
+            Value::Time(t) => Ok(t.to_string()),
+            Value::DateTime(dt) => Ok(dt.to_string()),
+            Value::DateTimeUtc(dt) => Ok(dt.to_string()),
+            Value::I64(n) => Ok(n.to_string()),
+            Value::I32(n) => Ok(n.to_string()),
+            Value::F64(n) => Ok(n.to_string()),
+            Value::Decimal(d) => Ok(d.to_string()),
             _ => Err(DbError::TypeMismatch(format!(
                 "Expected Str or Bytes, got {:?}",
                 v

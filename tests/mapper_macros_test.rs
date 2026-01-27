@@ -2,6 +2,9 @@ use std::sync::Once;
 use uorm::Param;
 use uorm::Result;
 use uorm::driver_manager::U;
+#[cfg(feature = "mysql")]
+use uorm::udbc::mysql::pool::MysqlDriver;
+#[cfg(feature = "sqlite")]
 use uorm::udbc::sqlite::pool::SqliteDriver;
 use uorm::{mapper_assets, sql};
 
@@ -20,10 +23,30 @@ struct InsertParams {
     age: i32,
 }
 
+#[derive(Debug, Param)]
+struct AgeStats {
+    age_sum: Option<i64>,
+}
+
+#[derive(Debug, Param)]
+struct AgeStatsByName {
+    name: Option<String>,
+    age_sum: Option<i64>,
+}
+
 #[sql("user")]
 struct UserDao;
 
 impl UserDao {
+    #[sql("sum_age")]
+    pub async fn sum_age() -> Result<AgeStats> {
+        exec!()
+    }
+
+    #[sql("sum_age_group_by_name")]
+    pub async fn sum_age_group_by_name() -> Result<Vec<AgeStatsByName>> {
+        exec!()
+    }
     #[sql("insert")]
     pub async fn insert_struct(params: InsertParams) -> Result<i64> {
         exec!()
@@ -75,6 +98,16 @@ impl UserDao {
     pub async fn get_by_id_named(id: i64) -> Result<Vec<User>> {
         exec!()
     }
+
+    #[sql("insert_with_date")]
+    pub async fn insert_with_date(name: String, age: i32, create_time: String) -> Result<i64> {
+        exec!()
+    }
+
+    #[sql("list_all_full")]
+    pub async fn list_all_full() -> Result<Vec<User>> {
+        exec!()
+    }
 }
 
 static INIT: Once = Once::new();
@@ -83,30 +116,53 @@ static INIT: Once = Once::new();
 mapper_assets!["tests/resources/mapper"];
 
 async fn setup_db() -> Box<dyn uorm::udbc::connection::Connection> {
+    // Only init logger once
     INIT.call_once(|| {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
-
-        let url = "sqlite:file:macro_test?mode=memory&cache=shared";
-        let driver = SqliteDriver::new(url).build().unwrap(); // Default name is "default"
-
-        // Register the driver to U
-        U.register(driver).unwrap();
     });
 
+    // Re-register driver for every test to ensure pool is bound to current runtime
+    #[cfg(feature = "sqlite")]
+    {
+        let url = "sqlite:file:macro_test?mode=memory&cache=shared";
+        let driver = SqliteDriver::new(url).build().unwrap();
+        U.register(driver).unwrap();
+    }
+
+    #[cfg(feature = "mysql")]
+    {
+        let url = "mysql://username:password@192.168.1.118:2881/test";
+        println!("Connecting to MySQL URL: {}", url);
+        let driver = MysqlDriver::new(url).build().unwrap();
+        U.register(driver).unwrap();
+    }
+
     let mapper = U.mapper().unwrap();
+    println!("Acquiring connection...");
     let mut conn = mapper.pool.acquire().await.unwrap();
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS users (
+    println!("Connection acquired!");
+    
+    #[cfg(feature = "sqlite")]
+    let create_sql = "CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         age INTEGER,
         status TEXT DEFAULT 'active',
         create_time DATETIME DEFAULT CURRENT_TIMESTAMP
-    )",
-        &[],
-    )
-    .await
-    .unwrap();
+    )";
+
+    #[cfg(feature = "mysql")]
+    let create_sql = "CREATE TABLE IF NOT EXISTS users (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(255),
+        age INT,
+        status VARCHAR(50) DEFAULT 'active',
+        create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    )";
+
+    // Drop table to ensure clean state for each test (since we use AUTO_INCREMENT)
+    conn.execute("DROP TABLE IF EXISTS users", &[]).await.unwrap();
+    conn.execute(create_sql, &[]).await.unwrap();
     conn
 }
 
@@ -187,4 +243,75 @@ async fn test_user_dao_macros() {
     // 5. Verify update
     let updated_users = UserDao::get_by_id_named(alice_id).await.unwrap();
     assert_eq!(updated_users[0].age, Some(21));
+}
+
+#[tokio::test]
+async fn test_date_formats() {
+    let _conn = setup_db().await;
+
+    macro_rules! test_date_format {
+        ($name:expr, $date:expr) => {
+            let _ = UserDao::insert_with_date($name.to_string(), 25, $date.to_string())
+                .await
+                .unwrap();
+            let users = UserDao::list_all_full().await.unwrap();
+            let user = users
+                .iter()
+                .find(|u| u.name.as_deref() == Some($name))
+                .unwrap();
+            
+            let db_val = user.create_time.as_deref().unwrap_or("").replace("T", " ");
+            let expected = $date.replace("T", " ");
+            
+            // Handle incomplete date string (e.g. "2023-10-01" vs "2023-10-01 00:00:00")
+            if !db_val.contains(&expected) && !expected.contains(&db_val) {
+                 assert_eq!(db_val, expected);
+            }
+        };
+    }
+
+    test_date_format!("DateUser1", "2023-10-01 10:00:00");
+    test_date_format!("DateUser2", "2023-10-01T10:00:00");
+    test_date_format!("DateUser3", "2023-10-01");
+}
+
+#[tokio::test]
+async fn test_sum_age() {
+    let mut conn = setup_db().await;
+    // Clean up to ensure deterministic result
+    conn.execute("DELETE FROM users", &[]).await.unwrap();
+
+    // Insert some users
+    UserDao::insert("User1".to_string(), 10).await.unwrap();
+    UserDao::insert("User2".to_string(), 20).await.unwrap();
+    UserDao::insert("User3".to_string(), 30).await.unwrap();
+
+    let stats = UserDao::sum_age().await.unwrap();
+    assert_eq!(stats.age_sum, Some(60));
+}
+
+#[tokio::test]
+async fn test_sum_age_group_by_name() {
+    let mut conn = setup_db().await;
+    // Clean up
+    conn.execute("DELETE FROM users", &[]).await.unwrap();
+
+    // Insert users:
+    // Group A: 10 + 20 = 30
+    // Group B: 30
+    UserDao::insert("GroupA".to_string(), 10).await.unwrap();
+    UserDao::insert("GroupA".to_string(), 20).await.unwrap();
+    UserDao::insert("GroupB".to_string(), 30).await.unwrap();
+
+    let stats_list = UserDao::sum_age_group_by_name().await.unwrap();
+    
+    assert_eq!(stats_list.len(), 2);
+    
+    // GroupA
+    assert_eq!(stats_list[0].name.as_deref(), Some("GroupA"));
+    assert_eq!(stats_list[0].age_sum, Some(30));
+
+    // GroupB
+    assert_eq!(stats_list[1].name.as_deref(), Some("GroupB"));
+    assert_eq!(stats_list[1].age_sum, Some(30));
 }

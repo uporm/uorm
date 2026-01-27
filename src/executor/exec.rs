@@ -72,6 +72,7 @@ where
 {
     rows.into_iter()
         .map(|r| {
+            // debug!("Mapping row: {:?}", r);
             R::from_value(Value::Map(r))
                 .map_err(|e| DbError::SerializationError(format!("Row mapping failed: {:?}", e)))
         })
