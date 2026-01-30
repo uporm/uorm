@@ -131,7 +131,7 @@ impl Driver for MysqlDriver {
         let get_conn_fut = pool.get_conn();
 
         // Acquire a connection, optionally with a timeout
-        let conn = if let Some(options) = &self.options {
+        let mut conn = if let Some(options) = &self.options {
             if options.timeout > 0 {
                 // Wrap acquisition in a timeout
                 match timeout(Duration::from_secs(options.timeout), get_conn_fut).await {
@@ -150,6 +150,12 @@ impl Driver for MysqlDriver {
             get_conn_fut.await
         }
         .map_err(|e| self.err_context(e))?;
+
+        // Ensure autocommit is enabled to prevent uncommitted transactions
+        // This fixes the issue where modifications might be left in pending state
+        if let Err(e) = conn.query_drop("SET autocommit = 1").await {
+            return Err(self.err_context(format!("Failed to set autocommit: {}", e)));
+        }
 
         Ok(Box::new(MysqlConnection::new(conn)))
     }
