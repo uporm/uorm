@@ -6,6 +6,7 @@ use crate::udbc::mysql::connection::MysqlConnection;
 use crate::udbc::{DEFAULT_DB_NAME, PoolOptions};
 use async_trait::async_trait;
 use mysql_async::{Opts, OptsBuilder, Pool, PoolConstraints, PoolOpts};
+use mysql_async::prelude::Queryable;
 use std::time::Duration;
 use tokio::time::timeout;
 
