@@ -9,17 +9,16 @@ use crate::executor::session::Session;
 use crate::udbc::DEFAULT_DB_NAME;
 use crate::udbc::driver::Driver;
 
-/// The global entry point for the `uorm` library.
-/// Use this singleton to register drivers, load mapper assets, and create sessions or mappers.
+/// `uorm` 库的全局入口。
+/// 使用该单例注册驱动、加载 mapper 资源，并创建 session 或 mapper。
 pub static U: LazyLock<DriverManager> = LazyLock::new(DriverManager::new);
 
-/// A manager for database drivers and their associated connection pools.
+/// 数据库驱动及其连接池的管理器。
 ///
-/// `DriverManager` acts as a registry where different database drivers (MySQL, SQLite, etc.)
-/// can be registered under unique names. It also provides methods to create `Session`
-/// and `Mapper` instances for interacting with the registered databases.
+/// `DriverManager` 作为注册表，用唯一名称注册不同数据库驱动（MySQL、SQLite 等），
+/// 并提供创建 `Session` 与 `Mapper` 的方法以访问已注册的数据库。
 pub struct DriverManager {
-    /// A thread-safe map storing registered database drivers by their unique names.
+    /// 线程安全的 map，按唯一名称保存已注册的数据库驱动。
     pools: DashMap<String, Arc<dyn Driver>>,
 }
 
@@ -30,20 +29,19 @@ impl Default for DriverManager {
 }
 
 impl DriverManager {
-    /// Creates a new, empty `DriverManager`.
+    /// 创建一个新的空 `DriverManager`。
     pub fn new() -> Self {
         Self {
             pools: DashMap::new(),
         }
     }
 
-    /// Registers a database driver with the manager.
+    /// 向管理器注册数据库驱动。
     ///
-    /// The driver's name (retrieved via `driver.name()`) is used as the registration key.
+    /// 驱动名称（通过 `driver.name()` 获取）用作注册 key。
     ///
-    /// # Errors
-    /// Returns an error if a driver with the same name (especially the default name)
-    /// is already registered.
+    /// # 错误
+    /// 若已有同名驱动（尤其是默认名）被注册，则返回错误。
     pub fn register(&self, driver: impl Driver + 'static) -> Result<()> {
         let name = driver.name().to_string();
         if name == DEFAULT_DB_NAME && self.pools.contains_key(&name) {
@@ -56,52 +54,52 @@ impl DriverManager {
         Ok(())
     }
 
-    /// Loads XML mapper files from the file system based on a glob pattern.
+    /// 根据 glob 模式从文件系统加载 XML mapper 文件。
     ///
-    /// This method allows you to register SQL templates defined in XML files.
+    /// 该方法用于注册 XML 中定义的 SQL 模板。
     ///
-    /// # Arguments
-    /// * `pattern` - A glob pattern (e.g., "resources/mappers/*.xml") to find mapper files.
+    /// # 参数
+    /// * `pattern` - 用于查找 mapper 文件的 glob 模式（如 "resources/mappers/*.xml"）。
     pub fn assets(&self, pattern: &str) -> Result<()> {
         crate::mapper_loader::load(pattern).map_err(|e| {
             DbError::MapperLoadError(format!("Failed to load mapper assets from pattern: {}", e))
         })
     }
 
-    /// Creates a `Session` for the default database.
+    /// 为默认数据库创建 `Session`。
     ///
-    /// # Returns
-    /// `Some(Session)` if the default driver is registered, otherwise `None`.
+    /// # 返回
+    /// 若默认驱动已注册则返回 `Some(Session)`，否则返回 `None`。
     pub fn session(&self) -> Option<Session> {
         self.session_by_name(DEFAULT_DB_NAME)
     }
 
-    /// Creates a `Session` for the specified database by name.
+    /// 为指定名称的数据库创建 `Session`。
     ///
-    /// A `Session` is used for executing raw SQL queries and managing transactions.
+    /// `Session` 用于执行原始 SQL 查询与管理事务。
     ///
-    /// # Returns
-    /// `Some(Session)` if a driver with `db_name` is registered, otherwise `None`.
+    /// # 返回
+    /// 若 `db_name` 对应驱动已注册则返回 `Some(Session)`，否则返回 `None`。
     pub fn session_by_name(&self, db_name: &str) -> Option<Session> {
         self.pools
             .get(db_name)
             .map(|v| Session::new(v.value().clone()))
     }
 
-    /// Creates a `Mapper` for the default database.
+    /// 为默认数据库创建 `Mapper`。
     ///
-    /// # Returns
-    /// `Some(Mapper)` if the default driver is registered, otherwise `None`.
+    /// # 返回
+    /// 若默认驱动已注册则返回 `Some(Mapper)`，否则返回 `None`。
     pub fn mapper(&self) -> Option<Mapper> {
         self.mapper_by_name(DEFAULT_DB_NAME)
     }
 
-    /// Creates a `Mapper` for the specified database by name.
+    /// 为指定名称的数据库创建 `Mapper`。
     ///
-    /// A `Mapper` is used for executing SQL statements defined in XML files by their IDs.
+    /// `Mapper` 用于按 ID 执行 XML 中定义的 SQL 语句。
     ///
-    /// # Returns
-    /// `Some(Mapper)` if a driver with `db_name` is registered, otherwise `None`.
+    /// # 返回
+    /// 若 `db_name` 对应驱动已注册则返回 `Some(Mapper)`，否则返回 `None`。
     pub fn mapper_by_name(&self, db_name: &str) -> Option<Mapper> {
         self.pools
             .get(db_name)

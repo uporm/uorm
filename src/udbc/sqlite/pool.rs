@@ -90,19 +90,19 @@ impl SqliteDriver {
         }
         .map_err(|e| DbError::DbError(format!("Failed to open connection: {}", e)))?;
 
-        // Set busy_timeout FIRST to handle potential locks during PRAGMA execution
+        // 先设置 busy_timeout，以处理执行 PRAGMA 时可能出现的锁
         if timeout_secs > 0 {
             conn.busy_timeout(Duration::from_secs(timeout_secs))
                 .map_err(|e| DbError::DbError(format!("Failed to set busy_timeout: {}", e)))?;
         }
 
-        // Enforce foreign keys for data integrity
+        // 启用外键约束以保证数据完整性
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|e| DbError::DbError(format!("Failed to set foreign_keys: {}", e)))?;
 
-        // WAL mode improves concurrency (readers don't block writers).
-        // synchronous = NORMAL is safe for WAL and faster.
-        // Note: Changing journal_mode requires a write lock on the database file.
+        // WAL 模式提升并发（读不阻塞写）。
+        // synchronous = NORMAL 对 WAL 足够安全且更快。
+        // 注意：切换 journal_mode 需要对数据库文件加写锁。
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
             .map_err(|e| DbError::DbError(format!("Failed to set journal_mode: {}", e)))?;
 
@@ -134,10 +134,10 @@ impl Driver for SqliteDriver {
         let target_clone = target.clone();
         let timeout_secs = self.options.as_ref().map(|o| o.timeout).unwrap_or(0);
 
-        // SQLite operations are synchronous. Spawn a blocking task to avoid stalling the async runtime.
-        // NOTE: This creates a new physical connection per call. For high throughput, a connection pool (e.g. r2d2) is recommended.
-        // WARNING: For `SqliteTarget::Memory`, this creates a FRESH, empty database for every call.
-        // To share in-memory state, use a file-based URL with shared cache (e.g. "file::memory:?cache=shared") and SqliteTarget::Path.
+        // SQLite 操作是同步的，通过阻塞任务避免阻塞异步运行时。
+        // 注意：每次调用都会创建新的物理连接，高吞吐建议使用连接池（如 r2d2）。
+        // 警告：对于 `SqliteTarget::Memory`，每次调用都会得到全新的空数据库。
+        // 如需共享内存状态，使用带共享缓存的文件型 URL（如 "file::memory:?cache=shared"）并使用 SqliteTarget::Path。
         let handle: tokio::task::JoinHandle<Result<Box<dyn Connection>>> =
             tokio::task::spawn_blocking(move || {
                 let conn = Self::open_connection(&target_clone, timeout_secs)?;
@@ -152,7 +152,7 @@ impl Driver for SqliteDriver {
     }
 
     async fn close(&self) -> Result<()> {
-        // No-op: connections are closed when dropped.
+        // 空操作：连接在 drop 时关闭。
         Ok(())
     }
 }

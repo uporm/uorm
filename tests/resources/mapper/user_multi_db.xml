@@ -2,35 +2,35 @@
 <!DOCTYPE mapper PUBLIC "-//uporm.github.io//DTD Mapper 1//EN" "https://uporm.github.io/dtd/uorm-1-mapper.dtd">
 <mapper namespace="user_multi">
 
-  <!-- Example 1: Different database implementations using databaseType attribute -->
-  <!-- uorm will match the one with matching databaseType, or fall back to the one without databaseType -->
+  <!-- 示例 1：使用 databaseType 的多数据库实现 -->
+  <!-- uorm 会优先匹配 databaseType 相同的实现，否则回退到无 databaseType 的实现 -->
 
-  <!-- Default implementation (fallback) -->
+  <!-- 默认实现（回退项） -->
   <select id="get_user_count">
     SELECT count(*) FROM users
   </select>
 
-  <!-- MySQL specific implementation (if needed, though count is same) -->
+  <!-- MySQL 专用实现（需要时使用，count 语义相同） -->
   <select id="get_user_count" databaseType="mysql">
     SELECT count(id) FROM users
   </select>
 
-  <!-- Example 2: Pagination (Syntax varies between DBs) -->
-  <!-- MySQL uses LIMIT offset, limit -->
+  <!-- 示例 2：分页（不同数据库语法不同） -->
+  <!-- MySQL 使用 LIMIT offset, limit -->
   <select id="get_paged_users" databaseType="mysql">
     SELECT id, name FROM users
     ORDER BY id
     LIMIT #{offset}, #{limit}
   </select>
 
-  <!-- SQLite uses LIMIT limit OFFSET offset -->
+  <!-- SQLite 使用 LIMIT limit OFFSET offset -->
   <select id="get_paged_users" databaseType="sqlite">
     SELECT id, name FROM users
     ORDER BY id
     LIMIT #{limit} OFFSET #{offset}
   </select>
 
-  <!-- Example 3: Date/Time functions -->
+  <!-- 示例 3：日期/时间函数 -->
   <select id="get_recent_users" databaseType="mysql">
     SELECT * FROM users
     WHERE create_time > DATE_SUB(NOW(), INTERVAL 7 DAY)
@@ -41,7 +41,7 @@
     WHERE create_time > datetime('now', '-7 days')
   </select>
 
-  <!-- Example 4: UPSERT (Insert or Update) -->
+  <!-- 示例 4：UPSERT（插入或更新） -->
   <insert id="upsert_user" databaseType="mysql">
     INSERT INTO users (id, name) VALUES (#{id}, #{name})
     ON DUPLICATE KEY UPDATE name = #{name}

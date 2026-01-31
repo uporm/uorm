@@ -24,10 +24,10 @@ async fn test_transaction_commit() {
     let driver = SqliteDriver::new(url).name(db_name).build().unwrap();
     let driver = Arc::new(driver);
 
-    // Keep a connection open to ensure memory DB persists
+    // 保持一个连接以确保内存数据库持续存在
     let _keep_alive = driver.acquire().await.unwrap();
 
-    // Create table
+    // 创建表
     let mut conn = driver.acquire().await.unwrap();
     conn.execute(
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
@@ -39,21 +39,21 @@ async fn test_transaction_commit() {
 
     let session = Session::new(driver.clone());
 
-    // Begin transaction
-    session.begin().await.unwrap();
+    uorm::executor::session::with_tx_context(|| async {
+        session.begin().await.unwrap();
 
-    // Insert data
-    let sql = "INSERT INTO users (name, age) VALUES (#{name}, #{age})";
-    let user = NewUser {
-        name: "Alice".to_string(),
-        age: 30,
-    };
-    session.execute(sql, &user).await.unwrap();
+        let sql = "INSERT INTO users (name, age) VALUES (#{name}, #{age})";
+        let user = NewUser {
+            name: "Alice".to_string(),
+            age: 30,
+        };
+        session.execute(sql, &user).await.unwrap();
 
-    // Commit
-    session.commit().await.unwrap();
+        session.commit().await.unwrap();
+    })
+    .await;
 
-    // Verify data exists
+    // 校验数据存在
     let count_sql = "SELECT * FROM users WHERE name = 'Alice'";
     let rows: Vec<User> = session.query(count_sql, &()).await.unwrap();
     assert_eq!(rows.len(), 1);
@@ -67,10 +67,10 @@ async fn test_transaction_rollback() {
     let driver = SqliteDriver::new(url).name(db_name).build().unwrap();
     let driver = Arc::new(driver);
 
-    // Keep a connection open to ensure memory DB persists
+    // 保持一个连接以确保内存数据库持续存在
     let _keep_alive = driver.acquire().await.unwrap();
 
-    // Create table
+    // 创建表
     let mut conn = driver.acquire().await.unwrap();
     conn.execute(
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
@@ -82,21 +82,21 @@ async fn test_transaction_rollback() {
 
     let session = Session::new(driver.clone());
 
-    // Begin transaction
-    session.begin().await.unwrap();
+    uorm::executor::session::with_tx_context(|| async {
+        session.begin().await.unwrap();
 
-    // Insert data
-    let sql = "INSERT INTO users (name, age) VALUES (#{name}, #{age})";
-    let user = NewUser {
-        name: "Bob".to_string(),
-        age: 25,
-    };
-    session.execute(sql, &user).await.unwrap();
+        let sql = "INSERT INTO users (name, age) VALUES (#{name}, #{age})";
+        let user = NewUser {
+            name: "Bob".to_string(),
+            age: 25,
+        };
+        session.execute(sql, &user).await.unwrap();
 
-    // Rollback
-    session.rollback().await.unwrap();
+        session.rollback().await.unwrap();
+    })
+    .await;
 
-    // Verify data does NOT exist
+    // 校验数据不存在
     let select_sql = "SELECT * FROM users WHERE name = 'Bob'";
     let rows: Vec<User> = session.query(select_sql, &()).await.unwrap();
     assert_eq!(rows.len(), 0);

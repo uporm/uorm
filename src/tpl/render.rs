@@ -16,7 +16,7 @@ impl<'a> RenderBuffer<'a> {
         let s_starts_with_newline = s.starts_with('\n') || s.starts_with("\r\n");
 
         if s_starts_with_newline {
-            // Check if buffer ends with whitespace that contains a newline
+            // 检查缓冲区末尾是否是包含换行的空白
             let buf_ends_with_newline = self
                 .sql
                 .chars()
@@ -25,10 +25,10 @@ impl<'a> RenderBuffer<'a> {
                 .any(|c| c == '\n');
 
             if buf_ends_with_newline {
-                // Collision: Buffer ends with newline (and maybe spaces), new string starts with newline.
-                // We want to avoid double newlines (blank lines) that are just artifacts of template tags.
-                // Strategy: Trim the trailing whitespace from the buffer, then append the new string.
-                // This effectively replaces the "old" indentation/newline with the "new" one.
+                // 冲突：缓冲区末尾是换行（可能带空格），新字符串也以换行开头。
+                // 避免因模板标签产生的重复空行。
+                // 策略：裁剪缓冲区尾部空白，再追加新字符串。
+                // 等价于用新的缩进/换行替换旧的。
                 let trimmed_len = self.sql.trim_end().len();
                 self.sql.truncate(trimmed_len);
             }
@@ -194,7 +194,7 @@ mod tests {
         let root = Value::Map(map);
         let ctx = Context::new(&root);
 
-        // a == 10
+        // a 等于 10
         let expr = Expr::Binary(
             Op::Eq,
             Box::new(Expr::Var("a".to_string())),
@@ -202,7 +202,7 @@ mod tests {
         );
         assert!(eval_expr(&expr, &ctx));
 
-        // a > 5
+        // a 大于 5
         let expr = Expr::Binary(
             Op::Gt,
             Box::new(Expr::Var("a".to_string())),
@@ -210,7 +210,7 @@ mod tests {
         );
         assert!(eval_expr(&expr, &ctx));
 
-        // b
+        // b（布尔变量）
         let expr = Expr::Var("b".to_string());
         assert!(eval_expr(&expr, &ctx));
     }

@@ -8,7 +8,7 @@ use log::debug;
 use std::collections::HashMap;
 use std::time::Instant;
 
-/// Executes a SQL statement (INSERT, UPDATE, DELETE) on the given connection.
+/// 在给定连接上执行 SQL 语句（INSERT、UPDATE、DELETE）。
 pub async fn execute_conn<T: ToValue>(
     conn: &mut dyn Connection,
     driver: &dyn Driver,
@@ -35,7 +35,7 @@ pub async fn execute_conn<T: ToValue>(
     result
 }
 
-/// Executes a SQL query on the given connection and returns raw rows.
+/// 在给定连接上执行 SQL 查询并返回原始行数据。
 pub async fn query_conn<T: ToValue>(
     conn: &mut dyn Connection,
     driver: &dyn Driver,
@@ -65,14 +65,14 @@ pub async fn query_conn<T: ToValue>(
     result
 }
 
-/// Maps raw database rows to the target type `R`.
+/// 将原始数据库行映射为目标类型 `R`。
 pub fn map_rows<R>(rows: Vec<HashMap<String, Value>>) -> Result<Vec<R>>
 where
     R: FromValue,
 {
     rows.into_iter()
         .map(|r| {
-            // debug!("Mapping row: {:?}", r);
+            // debug!("映射行: {:?}", r);
             R::from_value(Value::Map(r))
                 .map_err(|e| DbError::SerializationError(format!("Row mapping failed: {:?}", e)))
         })

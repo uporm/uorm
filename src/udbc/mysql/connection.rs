@@ -41,8 +41,7 @@ impl Connection for MysqlConnection {
         sql: &str,
         args: &[(String, Value)],
     ) -> Result<Vec<HashMap<String, Value>>> {
-        // Map args to positional params. Note: We ignore keys in args as mysql_async
-        // expects Positional params for '?' placeholders.
+        // 将参数映射为位置参数。注意：mysql_async 对 '?' 占位符只接受位置参数，因此忽略 args 中的 key。
         let params =
             mysql_async::Params::Positional(args.iter().map(|(_, v)| to_mysql_value(v)).collect());
 
@@ -66,7 +65,7 @@ impl Connection for MysqlConnection {
     }
 
     async fn last_insert_id(&mut self) -> Result<u64> {
-        // unwrap_or(0) handles cases where no insert happened or ID is unavailable
+        // unwrap_or(0) 用于处理未发生插入或无法获取 ID 的情况
         Ok(self.conn.last_insert_id().unwrap_or(0))
     }
 

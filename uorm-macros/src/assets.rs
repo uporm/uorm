@@ -11,12 +11,12 @@ pub fn mapper_assets_impl(input: TokenStream) -> TokenStream {
     let dir_lit = parse_macro_input!(input as LitStr);
     let dir = dir_lit.value();
 
-    // 1. Resolve directory path relative to CARGO_MANIFEST_DIR
+    // 1. 相对 CARGO_MANIFEST_DIR 解析目录路径
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let root = PathBuf::from(manifest_dir);
     let dir_path = root.join(&dir);
 
-    // 2. Validate directory existence
+    // 2. 校验目录是否存在
     if !dir_path.exists() || !dir_path.is_dir() {
         return syn::Error::new(
             dir_lit.span(),
@@ -26,7 +26,7 @@ pub fn mapper_assets_impl(input: TokenStream) -> TokenStream {
         .into();
     }
 
-    // 3. Find all XML files recursively
+    // 3. 递归查找所有 XML 文件
     let pattern = dir_path.join("**/*.xml");
     let pattern_str = pattern.to_string_lossy();
 
@@ -39,21 +39,21 @@ pub fn mapper_assets_impl(input: TokenStream) -> TokenStream {
         }
     };
 
-    // 4. Generate asset loading code
+    // 4. 生成资源加载代码
     let assets: Vec<_> = paths
         .filter_map(Result::ok)
         .filter(|path| path.is_file())
         .filter_map(|path| {
             let abs_path = path.canonicalize().ok()?;
             let abs_path_str = abs_path.to_string_lossy().to_string();
-            // Use include_bytes! for binary embedding and runtime string conversion
+            // 使用 include_bytes! 二进制内嵌并在运行时转换为字符串
             Some(quote! {
                 (#abs_path_str, std::str::from_utf8(include_bytes!(#abs_path_str)).expect("Invalid UTF-8 in mapper XML"))
             })
         })
         .collect();
 
-    // 5. Generate unique registration function
+    // 5. 生成唯一的注册函数
     let mut hasher = DefaultHasher::new();
     dir.hash(&mut hasher);
     let fn_name = format_ident!("__uorm_auto_register_assets_{}", hasher.finish());

@@ -29,7 +29,7 @@ fn test_param_struct_from_value() {
     assert_eq!(user.id, 1);
     assert_eq!(user.name, "Alice");
     assert_eq!(user.custom, "CustomVal");
-    assert_eq!(user.ignored, ""); // Default string
+    assert_eq!(user.ignored, ""); // 默认字符串
 }
 
 #[test]
@@ -45,12 +45,12 @@ fn test_param_struct_to_value() {
 
     match val {
         Value::Map(map) => {
-            // Note: Value types must match exactly what ToValue produces
+            // 注意：Value 类型必须与 ToValue 的输出完全一致
             assert_eq!(map.get("id"), Some(&Value::I32(2)));
             assert_eq!(map.get("name"), Some(&Value::Str("Bob".to_string())));
             assert_eq!(map.get("custom_col"), Some(&Value::Str("Val".to_string())));
             assert_eq!(map.get("customCol"), Some(&Value::Str("Val".to_string())));
-            // ignored field should not be in the map
+            // ignored 字段不应出现在 map 中
             assert!(!map.contains_key("ignored"));
         }
         _ => panic!("Expected Value::Map"),

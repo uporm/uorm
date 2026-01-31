@@ -2,54 +2,53 @@ use crate::Result;
 use crate::udbc::connection::Connection;
 use async_trait::async_trait;
 
-/// `Driver` defines a common interface for database drivers.
+/// `Driver` 定义数据库驱动的通用接口。
 ///
-/// A driver is responsible for:
-/// - Providing metadata about itself (name, type)
-/// - Generating parameter placeholders for SQL queries
-/// - Managing database connections
-/// - Cleaning up resources when closed
+/// 驱动负责：
+/// - 提供自身元数据（名称、类型）
+/// - 生成 SQL 查询的参数占位符
+/// - 管理数据库连接
+/// - 在关闭时释放资源
 #[async_trait]
 pub trait Driver: Send + Sync {
-    /// Returns the name of the driver.
+    /// 返回驱动名称。
     ///
-    /// Example: "postgres", "mysql", "sqlite"
+    /// 示例："postgres"、"mysql"、"sqlite"
     fn name(&self) -> &str;
 
-    /// Returns the type of the driver.
+    /// 返回驱动类型。
     ///
-    /// This can be used to distinguish between different database categories
-    /// or protocols.
+    /// 可用于区分不同数据库类别或协议。
     fn r#type(&self) -> &str;
 
-    /// Generates a placeholder string for a query parameter.
+    /// 生成查询参数的占位符字符串。
     ///
-    /// # Arguments
-    /// * `param_seq` - The sequential index of the parameter (starting from 1)
-    /// * `param_name` - The logical name of the parameter
+    /// # 参数
+    /// * `param_seq` - 参数序号（从 1 开始）
+    /// * `param_name` - 参数逻辑名称
     ///
-    /// # Returns
-    /// A database-specific placeholder string.
+    /// # 返回
+    /// 数据库相关的占位符字符串。
     ///
-    /// Example outputs:
-    /// - PostgreSQL: `$1`
-    /// - MySQL / SQLite: `?`
-    /// - Named parameters: `:param_name`
+    /// 示例输出：
+    /// - PostgreSQL：`$1`
+    /// - MySQL / SQLite：`?`
+    /// - 命名参数：`:param_name`
     fn placeholder(&self, param_seq: usize, param_name: &str) -> String;
 
-    /// Creates and returns a new database connection.
+    /// 创建并返回新的数据库连接。
     ///
-    /// # Returns
-    /// - `Ok(Box<dyn Connection>)` if the connection is successfully established
-    /// - `Err(Error)` if connection creation fails
+    /// # 返回
+    /// - `Ok(Box<dyn Connection>)`：连接建立成功
+    /// - `Err(Error)`：连接创建失败
     async fn acquire(&self) -> Result<Box<dyn Connection>>;
 
-    /// Closes the driver and releases any associated resources.
+    /// 关闭驱动并释放相关资源。
     ///
-    /// This should be called when the driver is no longer needed.
+    /// 驱动不再需要时应调用该方法。
     ///
-    /// # Returns
-    /// - `Ok(())` if cleanup succeeds
-    /// - `Err(Error)` if an error occurs during cleanup
+    /// # 返回
+    /// - `Ok(())`：清理成功
+    /// - `Err(Error)`：清理过程发生错误
     async fn close(&self) -> Result<()>;
 }

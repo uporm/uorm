@@ -97,12 +97,12 @@ async fn setup_mapper(base_name: &str) -> (Mapper, Box<dyn Connection>) {
     let url = format!("sqlite:file:{}?mode=memory&cache=shared", db_name);
     let driver = SqliteDriver::new(url).name(&db_name).build().unwrap();
 
-    // Register the driver to U
+    // 将驱动注册到 U
     U.register(driver).unwrap();
 
     let mapper = U.mapper_by_name(&db_name).unwrap();
 
-    // Create table using a temporary connection from the mapper's pool
+    // 使用 mapper 连接池的临时连接创建表
     let mut conn = mapper.pool.acquire().await.unwrap();
     conn.execute(
         "CREATE TABLE users (
@@ -124,7 +124,7 @@ async fn setup_mapper(base_name: &str) -> (Mapper, Box<dyn Connection>) {
 async fn test_simple_select() {
     let (mapper, _conn) = setup_mapper("simple_select").await;
 
-    // Insert some data first
+    // 先插入一些数据
     mapper
         .execute::<i64, _>(
             "user.insert",
@@ -136,7 +136,7 @@ async fn test_simple_select() {
         .await
         .unwrap();
 
-    // Test get_by_id
+    // 测试 get_by_id
     let users: Vec<User> = mapper
         .execute("user.get_by_id", &IdArg { id: 1 })
         .await
@@ -145,7 +145,7 @@ async fn test_simple_select() {
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name.as_deref(), Some("Alice"));
 
-    // Test list_all
+    // 测试 list_all
     let users: Vec<User> = mapper.execute("user.list_all", &()).await.unwrap();
     println!("List all result: {:?}", users);
     assert_eq!(users.len(), 1);
@@ -155,7 +155,7 @@ async fn test_simple_select() {
 async fn test_insert_return_key() {
     let (mapper, _conn) = setup_mapper("insert_return_key").await;
 
-    // Test insert with returnKey=true
+    // 测试 insert（returnKey=true）
     let id: i64 = mapper
         .execute(
             "user.insert_return_key",
@@ -170,7 +170,7 @@ async fn test_insert_return_key() {
     println!("Inserted ID: {}", id);
     assert!(id > 0);
 
-    // Verify retrieval
+    // 校验查询结果
     let users: Vec<User> = mapper
         .execute("user.get_by_id", &IdArg { id })
         .await
@@ -183,31 +183,32 @@ async fn test_insert_return_key() {
 async fn test_insert_return_key_in_transaction() {
     let (mapper, _conn) = setup_mapper("insert_return_key_tx").await;
 
-    // Start a manual transaction
     let session = uorm::driver_manager::U
         .session_by_name(mapper.pool.name())
         .unwrap();
-    session.begin().await.unwrap();
+    let id: i64 = uorm::executor::session::with_tx_context(|| async {
+        session.begin().await.unwrap();
 
-    // Test insert with returnKey=true inside transaction
-    let id: i64 = mapper
-        .execute(
-            "user.insert_return_key",
-            &NameAgeArg {
-                name: "Frank".to_string(),
-                age: 40,
-            },
-        )
-        .await
-        .unwrap();
+        let id: i64 = mapper
+            .execute(
+                "user.insert_return_key",
+                &NameAgeArg {
+                    name: "Frank".to_string(),
+                    age: 40,
+                },
+            )
+            .await
+            .unwrap();
 
-    println!("Inserted ID inside TX: {}", id);
-    assert!(id > 0);
+        println!("Inserted ID inside TX: {}", id);
+        assert!(id > 0);
 
-    // Commit transaction
-    session.commit().await.unwrap();
+        session.commit().await.unwrap();
+        id
+    })
+    .await;
 
-    // Verify retrieval
+    // 校验查询结果
     let users: Vec<User> = mapper
         .execute("user.get_by_id", &IdArg { id })
         .await
@@ -220,7 +221,7 @@ async fn test_insert_return_key_in_transaction() {
 async fn test_insert() {
     let (mapper, _conn) = setup_mapper("insert").await;
 
-    // Test insert_user (object property access)
+    // 测试 insert_user（对象属性访问）
     let new_user = User {
         id: Some(10),
         name: Some("Bob".to_string()),
@@ -242,7 +243,7 @@ async fn test_insert() {
     assert_eq!(user.len(), 1);
     assert_eq!(user[0].name.as_deref(), Some("Bob"));
 
-    // Test batch_insert (foreach)
+    // 测试 batch_insert（foreach）
     let users_to_insert = vec![
         User {
             id: None,
@@ -272,14 +273,14 @@ async fn test_insert() {
 
     let all: Vec<User> = mapper.execute("user.list_all", &()).await.unwrap();
     println!("All users after batch insert: {:?}", all);
-    assert_eq!(all.len(), 3); // Bob, Charlie, David
+    assert_eq!(all.len(), 3); // Bob、Charlie、David
 }
 
 #[tokio::test]
 async fn test_conditional_select() {
     let (mapper, _conn) = setup_mapper("conditional_select").await;
 
-    // Insert test data
+    // 插入测试数据
     mapper
         .execute::<i64, _>(
             "user.insert",
@@ -301,7 +302,7 @@ async fn test_conditional_select() {
         .await
         .unwrap();
 
-    // Test get_user_details with full = true
+    // 测试 get_user_details（full = true）
     let details: Vec<User> = mapper
         .execute(
             "user.get_user_details",
@@ -312,7 +313,7 @@ async fn test_conditional_select() {
     println!("User details (full=true): {:?}", details);
     assert!(details[0].status.is_some());
 
-    // Test get_user_details with full = false
+    // 测试 get_user_details（full = false）
     let details_simple: Vec<User> = mapper
         .execute(
             "user.get_user_details",
@@ -323,7 +324,7 @@ async fn test_conditional_select() {
     println!("User details (full=false): {:?}", details_simple);
     assert!(details_simple[0].status.is_none());
 
-    // Test search_users (multiple optional filters)
+    // 测试 search_users（多个可选过滤条件）
     let searched: Vec<User> = mapper
         .execute(
             "user.search_users",
@@ -338,7 +339,7 @@ async fn test_conditional_select() {
     assert_eq!(searched.len(), 1);
     assert_eq!(searched[0].name.as_deref(), Some("Bob"));
 
-    // Test list_active_adults (logical operators)
+    // 测试 list_active_adults（逻辑运算）
     let active_adults: Vec<User> = mapper
         .execute(
             "user.list_active_adults",
@@ -388,7 +389,7 @@ async fn test_foreach() {
         .await
         .unwrap();
 
-    // Test list_by_ids
+    // 测试 list_by_ids
     let ids_users: Vec<User> = mapper
         .execute("user.list_by_ids", &IdsArg { ids: vec![1, 3] })
         .await
@@ -414,7 +415,7 @@ async fn test_update_delete() {
         .await
         .unwrap();
 
-    // Test update_age
+    // 测试 update_age
     let update_affected: i64 = mapper
         .execute("user.update_age", &UpdateAgeArg { id: 1, age: 21 })
         .await
@@ -426,7 +427,7 @@ async fn test_update_delete() {
         .unwrap();
     assert_eq!(user1[0].age.unwrap(), 21);
 
-    // Test update_user_selective
+    // 测试 update_user_selective
     let update_selective_affected: i64 = mapper
         .execute(
             "user.update_user_selective",
@@ -447,7 +448,7 @@ async fn test_update_delete() {
     assert_eq!(user1_updated[0].name.as_deref(), Some("Alicia"));
     assert_eq!(user1_updated[0].age.unwrap(), 21);
 
-    // Test delete_by_id
+    // 测试 delete_by_id
     let delete_affected: i64 = mapper
         .execute("user.delete_by_id", &IdArg { id: 1 })
         .await
@@ -456,7 +457,7 @@ async fn test_update_delete() {
     let all: Vec<User> = mapper.execute("user.list_all", &()).await.unwrap();
     assert_eq!(all.len(), 0);
 
-    // Test delete_by_condition
+    // 测试 delete_by_condition
     mapper
         .execute::<i64, _>(
             "user.insert",

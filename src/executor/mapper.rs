@@ -6,10 +6,9 @@ use crate::udbc::driver::Driver;
 use crate::udbc::value::{FromValue, ToValue, Value};
 use std::sync::Arc;
 
-/// Mapper client encapsulating connection pool and SQL template execution.
+/// 封装连接池和 SQL 模板执行的 Mapper 客户端。
 ///
-/// Acts as a higher-level abstraction over `Session`, handling SQL ID lookup
-/// and result mapping based on statement type.
+/// 作为 `Session` 的高层抽象，负责 SQL ID 查找与按语句类型做结果映射。
 pub struct Mapper {
     pub pool: Arc<dyn Driver>,
 }
@@ -19,8 +18,8 @@ impl Mapper {
         Self { pool }
     }
 
-    /// Creates a new ephemeral session for this mapper.
-    /// Note: Sessions are cheap to create (Arc clone).
+    /// 为该 mapper 创建一个临时 session。
+    /// 注意：创建 session 的成本很低（仅 Arc 克隆）。
     fn session(&self) -> Session {
         Session::new(self.pool.clone())
     }
@@ -30,13 +29,48 @@ impl Mapper {
             .ok_or_else(|| DbError::TemplateEngineError(format!("SQL ID not found: {}", sql_id)))
     }
 
-    /// Executes a mapped SQL statement by ID.
+    async fn execute_insert_with_return_key<T: ToValue>(
+        &self,
+        session: &Session,
+        sql_id: &str,
+        sql: &str,
+        args: &T,
+    ) -> Result<Value> {
+        if session.is_transaction_active() {
+            let _ = session.execute_named(sql_id, sql, args).await?;
+            let id = session.last_insert_id().await?;
+            return Ok(Value::U64(id));
+        }
+
+        crate::executor::session::with_tx_context(|| async {
+            session.begin().await?;
+            let result = async {
+                let _ = session.execute_named(sql_id, sql, args).await?;
+                session.last_insert_id().await
+            }
+            .await;
+
+            match result {
+                Ok(id) => {
+                    session.commit().await?;
+                    Ok(Value::U64(id))
+                }
+                Err(e) => {
+                    session.rollback().await?;
+                    Err(e)
+                }
+            }
+        })
+        .await
+    }
+
+    /// 按 ID 执行映射后的 SQL 语句。
     ///
-    /// # Generic Parameters
-    /// * `R`: Return type. Must be convertible from a database value (supports both Serde and FromRow).
-    ///   - For `Select`, `R` is typically `Vec<T>`.
-    ///   - For `Insert`/`Update`/`Delete`, `R` is typically `u64` (affected rows) or `i64`.
-    /// * `T`: Argument type. Must be serializable (passed to the template engine).
+    /// # 泛型参数
+    /// * `R`：返回类型。必须可从数据库值转换（同时支持 Serde 与 FromRow）。
+    ///   - 对 `Select`，`R` 通常为 `Vec<T>`。
+    ///   - 对 `Insert`/`Update`/`Delete`，`R` 通常为 `u64`（影响行数）或 `i64`。
+    /// * `T`：参数类型。必须可序列化（传入模板引擎）。
     pub async fn execute<R, T>(&self, sql_id: &str, args: &T) -> Result<R>
     where
         T: ToValue,
@@ -79,8 +113,8 @@ impl Mapper {
                                             match R::from_value(only_val) {
                                                 Ok(v) => return Ok(v),
                                                 Err(_) => {
-                                                     // If single value mapping also fails, return the map mapping error
-                                                     // because that's likely what the user intended (mapping to a struct)
+                                                     // 若单值映射也失败，返回 map 映射错误
+                                                     // 因为用户更可能希望映射到结构体
                                                      return Err(map_err);
                                                 }
                                             }
@@ -101,31 +135,8 @@ impl Mapper {
                 let session = self.session();
 
                 let val = if stmt.return_key {
-                    let is_active = session.is_transaction_active();
-                    if is_active {
-                        let _ = session.execute_named(sql_id, sql, args).await?;
-                        let id = session.last_insert_id().await?;
-                        Value::U64(id)
-                    } else {
-                        // Use transaction to ensure same connection for insert and last_insert_id
-                        session.begin().await?;
-                        let result = async {
-                            let _ = session.execute_named(sql_id, sql, args).await?;
-                            session.last_insert_id().await
-                        }
-                        .await;
-
-                        match result {
-                            Ok(id) => {
-                                session.commit().await?;
-                                Value::U64(id)
-                            }
-                            Err(e) => {
-                                session.rollback().await?;
-                                return Err(e);
-                            }
-                        }
-                    }
+                    self.execute_insert_with_return_key(&session, sql_id, sql, args)
+                        .await?
                 } else {
                     let affected = session.execute_named(sql_id, sql, args).await?;
                     Value::U64(affected)

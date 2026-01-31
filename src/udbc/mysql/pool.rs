@@ -11,11 +11,10 @@ use tokio::time::timeout;
 
 const MYSQL_TYPE: &str = "mysql";
 
-/// `MysqlDriver` manages the MySQL connection pool and configuration.
+/// `MysqlDriver` 负责管理 MySQL 连接池与配置。
 ///
-/// It implements the `Driver` trait to provide database connectivity.
-/// This implementation prioritizes correctness and robustness by strictly validating
-/// configuration options and handling connection acquisition timeouts gracefully.
+/// 它实现 `Driver` trait 以提供数据库连接能力。
+/// 该实现通过严格校验配置选项并优雅处理连接获取超时来保证正确性与健壮性。
 pub struct MysqlDriver {
     url: String,
     name: String,
@@ -24,7 +23,7 @@ pub struct MysqlDriver {
 }
 
 impl MysqlDriver {
-    /// Creates a new `MysqlDriver` instance with the given connection URL.
+    /// 使用给定连接 URL 创建新的 `MysqlDriver` 实例。
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             name: DEFAULT_DB_NAME.to_string(),
@@ -34,25 +33,25 @@ impl MysqlDriver {
         }
     }
 
-    /// Sets the name of the database driver instance.
+    /// 设置数据库驱动实例名称。
     pub fn name(mut self, name: String) -> Self {
         self.name = name;
         self
     }
 
-    /// Configures the connection options (e.g., pool size, timeout).
-    /// Returns `Self` to allow method chaining.
+    /// 配置连接选项（如连接池大小、超时）。
+    /// 返回 `Self` 以支持链式调用。
     pub fn options(mut self, options: PoolOptions) -> Self {
         self.options = Some(options);
         self
     }
 
-    /// Builds the connection pool and prepares the driver for use.
+    /// 构建连接池并准备驱动使用。
     ///
-    /// # Errors
-    /// Returns `Error` if:
-    /// - The connection URL is invalid.
-    /// - Pool constraints are invalid (e.g., max_idle > max_open or max_open == 0).
+    /// # 错误
+    /// 在以下情况返回 `Error`：
+    /// - 连接 URL 无效
+    /// - 连接池约束无效（如 max_idle > max_open 或 max_open == 0）
     pub fn build(mut self) -> Result<Self> {
         let opts = Opts::from_url(&self.url).map_err(|e| {
             DbError::DbUrlError(format!("[{}] Invalid connection URL: {}", self.name, e))
@@ -60,21 +59,21 @@ impl MysqlDriver {
 
         let mut builder = OptsBuilder::from_opts(opts);
 
-        // Enable TCP keepalive by default (60s) to prevent connection drop during inactivity
-        // This is crucial for handling scenarios like computer sleep or long idle times
-        // where the server or intermediate firewalls might drop the connection silently.
+        // 默认启用 TCP keepalive（60s），避免空闲期间连接被断开
+        // 这对电脑休眠或长时间空闲等场景很关键
+        // 服务器或中间防火墙可能会悄然断开连接
         builder = builder.tcp_keepalive(Some(60_000u32));
 
         if let Some(options) = &self.options {
-            // Validate basic constraints: max_open_conns must be > 0
+            // 校验基本约束：max_open_conns 必须大于 0
             if options.max_open_conns == 0 {
                 return Err(self.err_context(
                     "Invalid pool constraints: max_open_conns must be greater than 0",
                 ));
             }
 
-            // Configure connection pool constraints (min/max connections)
-            // mysql_async requires: min <= max and max > 0
+            // 配置连接池约束（最小/最大连接数）
+            // mysql_async 要求：min <= max 且 max > 0
             let constraints = PoolConstraints::new(
                 options.max_idle_conns as usize,
                 options.max_open_conns as usize,
@@ -88,7 +87,7 @@ impl MysqlDriver {
 
             let mut pool_opts = PoolOpts::default().with_constraints(constraints);
 
-            // Configure connection lifetime if specified
+            // 如有设置则配置连接生命周期
             if options.max_lifetime > 0 {
                 pool_opts = pool_opts
                     .with_inactive_connection_ttl(Duration::from_secs(options.max_lifetime));
@@ -102,7 +101,7 @@ impl MysqlDriver {
         Ok(self)
     }
 
-    /// Helper to format errors with the driver name context.
+    /// 带驱动名上下文的错误格式化辅助方法。
     fn err_context<T: std::fmt::Display>(&self, msg: T) -> DbError {
         DbError::DbError(format!("[{}] {}", self.name, msg))
     }
@@ -119,7 +118,7 @@ impl Driver for MysqlDriver {
     }
 
     fn placeholder(&self, _param_seq: usize, _param_name: &str) -> String {
-        // MySQL uses '?' as the standard parameter placeholder
+        // MySQL 使用 '?' 作为标准参数占位符
         "?".to_string()
     }
 
@@ -130,10 +129,10 @@ impl Driver for MysqlDriver {
 
         let get_conn_fut = pool.get_conn();
 
-        // Acquire a connection, optionally with a timeout
+        // 获取连接，可选超时
         let conn = if let Some(options) = &self.options {
             if options.timeout > 0 {
-                // Wrap acquisition in a timeout
+                // 为连接获取包裹超时
                 match timeout(Duration::from_secs(options.timeout), get_conn_fut).await {
                     Ok(result) => result,
                     Err(_) => {
@@ -156,9 +155,8 @@ impl Driver for MysqlDriver {
 
     async fn close(&self) -> Result<()> {
         if let Some(pool) = &self.pool {
-            // Gracefully disconnect the pool.
-            // We clone the pool handle because disconnect() consumes it,
-            // but we want to signal the shared pool to close.
+            // 优雅断开连接池
+            // 由于 disconnect() 会消费句柄，因此克隆以通知共享连接池关闭
             pool.clone()
                 .disconnect()
                 .await

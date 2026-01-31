@@ -8,20 +8,19 @@ use syn::{
     punctuated::Punctuated,
 };
 
-/// Arguments for the `#[sql]` attribute macro.
+/// `#[sql]` 属性宏的参数。
 ///
-/// Supports both positional and named arguments:
-/// - Positional: `#[sql("my_id")]` or `#[sql("my_namespace")]`
-/// - Named: `#[sql(id = "my_id", database = "other_db", namespace = "my_ns")]`
+/// 支持位置参数与命名参数：
+/// - 位置参数：`#[sql("my_id")]` 或 `#[sql("my_namespace")]`
+/// - 命名参数：`#[sql(id = "my_id", database = "other_db", namespace = "my_ns")]`
 struct SqlArgs {
-    /// The first positional string literal, which can represent either an ID (on functions)
-    /// or a namespace (on structs).
+    /// 第一个位置字符串字面量，可表示函数上的 ID 或结构体上的命名空间。
     value: Option<String>,
-    /// Explicitly provided SQL ID.
+    /// 显式指定的 SQL ID。
     id: Option<String>,
-    /// The name of the database driver to use (defaults to "default").
+    /// 使用的数据库驱动名称（默认 "default"）。
     database: Option<String>,
-    /// The XML namespace where the SQL is defined.
+    /// SQL 所在的 XML 命名空间。
     namespace: Option<String>,
 }
 
@@ -41,7 +40,7 @@ impl Parse for SqlArgs {
             });
         }
 
-        // Try to parse an optional positional string literal first.
+        // 先尝试解析可选的位置字符串字面量
         if input.peek(LitStr) {
             let s: LitStr = input.parse()?;
             value = Some(s.value());
@@ -54,11 +53,11 @@ impl Parse for SqlArgs {
                     namespace,
                 });
             }
-            // If more arguments follow, they must be separated by a comma.
+            // 若后续还有参数，必须用逗号分隔
             input.parse::<Token![,]>()?;
         }
 
-        // Parse remaining named arguments like `id = "..."`.
+        // 解析剩余的命名参数，如 `id = "..."`
         let metas: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(input)?;
         for meta in metas {
             if let Meta::NameValue(nv) = meta
@@ -84,24 +83,23 @@ impl Parse for SqlArgs {
     }
 }
 
-/// The entry point for the `#[sql]` attribute macro.
+/// `#[sql]` 属性宏入口。
 ///
-/// This macro can be applied to:
-/// 1. A struct: to define the default SQL namespace for all methods in its impl block.
-/// 2. A function: to bind the function to a specific SQL statement in a Mapper XML.
+/// 该宏可用于：
+/// 1. 结构体：定义其 impl 中方法的默认 SQL 命名空间。
+/// 2. 函数：将函数绑定到 Mapper XML 中的某条 SQL。
 pub fn sql_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_clone = input.clone();
-    // Dispatch based on whether the attribute is applied to a struct or a function.
+    // 根据属性应用对象是结构体还是函数进行分发
     if syn::parse::<ItemStruct>(input_clone).is_ok() {
         return sql_namespace_impl(args, input);
     }
     generate_mapper_call(args, input)
 }
 
-/// Handles `#[sql]` when applied to a struct.
+/// 处理 `#[sql]` 作用于结构体的情况。
 ///
-/// It injects a `NAMESPACE` constant into the struct's implementation, which
-/// is then used by functions within the same struct.
+/// 会在结构体的实现中注入 `NAMESPACE` 常量，供同一结构体内的方法使用。
 fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let sql_args = parse_macro_input!(args as SqlArgs);
     let namespace = sql_args
@@ -116,7 +114,7 @@ fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream {
         #item_struct
 
         impl #struct_name {
-            /// The default XML namespace for SQL statements associated with this struct.
+            /// 与该结构体关联的 SQL 语句默认 XML 命名空间。
             pub const NAMESPACE: &'static str = #namespace;
         }
     };
@@ -164,12 +162,12 @@ fn is_primitive_or_wrapper(ty: &syn::Type) -> bool {
     }
 }
 
-/// Handles `#[sql]` when applied to a function.
+/// 处理 `#[sql]` 作用于函数的情况。
 ///
-/// It transforms the function body to:
-/// 1. Serialize function arguments into a temporary structure.
-/// 2. Define a local `exec!()` macro that calls the appropriate `uorm` mapper.
-/// 3. Execute the original function block (which is expected to call `exec!()`).
+/// 会将函数体转换为：
+/// 1. 将函数参数序列化为临时结构体。
+/// 2. 定义本地 `exec!()` 宏，调用对应的 `uorm` mapper。
+/// 3. 执行原始函数块（预期会调用 `exec!()`）。
 fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let sql_args = parse_macro_input!(args as SqlArgs);
     let item_fn = parse_macro_input!(input as ItemFn);
@@ -180,16 +178,16 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
     let vis = &item_fn.vis;
     let block = &item_fn.block;
 
-    // Force the generated function to be `async fn` so `exec!()` can use `.await` directly.
+    // 强制生成的函数为 `async fn`，以便 `exec!()` 可直接使用 `.await`
     let async_token = quote! { async };
 
-    // Determine the SQL ID: priority given to explicit `id`, then positional `value`, then function name.
+    // 确定 SQL ID：优先使用显式 `id`，其次位置 `value`，再其次函数名
     let raw_id = sql_args
         .id
         .or(sql_args.value)
         .unwrap_or_else(|| fn_name.to_string());
 
-    // Check if raw_id contains a dot to infer namespace
+    // 若 raw_id 含点号，则推断命名空间
     let (inferred_namespace, final_id) = if let Some(idx) = raw_id.find('.') {
         (
             Some(raw_id[..idx].to_string()),
@@ -199,17 +197,17 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         (None, raw_id)
     };
 
-    // Determine the database name, defaulting to "default".
+    // 确定数据库名称，默认 "default"
     let db_name = sql_args.database.unwrap_or_else(|| "default".to_string());
 
-    // Prepare fields for the anonymous arguments struct that will be serialized.
+    // 为即将序列化的匿名参数结构体准备字段
     let mut struct_fields = Vec::new();
     let mut field_inits = Vec::new();
 
     let mut use_arg_directly = false;
     let mut direct_arg_ident = None;
 
-    // Check for parameter mapping
+    // 检查参数映射
     let mut param_mappings = std::collections::HashMap::new();
     let mut use_param_mapping = false;
 
@@ -234,7 +232,7 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
-    // Check if we should unwrap a single struct argument
+    // 判断是否应解包单个结构体参数
     let typed_args: Vec<&syn::PatType> = fn_args
         .iter()
         .filter_map(|arg| {
@@ -264,9 +262,8 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
                 let ident = &pat_ident.ident;
                 let ty = &pat_type.ty;
 
-                // Check if ty is a reference to handle `&T` arguments correctly.
-                // If it is a reference, we use the inner type for the struct field
-                // and initialize it directly with the argument (which is already a reference).
+                // 检查 ty 是否为引用，以正确处理 `&T` 参数
+                // 若为引用，使用内部类型作为字段类型，并直接用该参数初始化
                 if let syn::Type::Reference(type_ref) = &**ty {
                     let inner_ty = &type_ref.elem;
                     struct_fields.push(quote! { #ident: &'a #inner_ty });
@@ -359,14 +356,13 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
         )
     };
 
-    // The method to call on the mapper (usually 'execute' or 'query').
-    // Note: The macro currently hardcodes 'execute', but the actual behavior
-    // is often determined by the return type in more complex implementations.
+    // 在 mapper 上调用的方法（通常是 'execute' 或 'query'）
+    // 注意：当前宏硬编码为 'execute'，但复杂实现中常由返回类型决定实际行为
     let method_ident = syn::Ident::new("execute", Span::call_site());
     let id_lit = LitStr::new(&final_id, Span::call_site());
     let db_name_lit = LitStr::new(&db_name, Span::call_site());
 
-    // Determine the namespace: either explicitly provided or retrieved from the struct's `NAMESPACE` constant.
+    // 确定命名空间：显式指定或从结构体 `NAMESPACE` 常量获取
     let namespace_tokens = if let Some(ns) = sql_args.namespace {
         let ns_lit = LitStr::new(&ns, Span::call_site());
         quote! { #ns_lit }
@@ -379,16 +375,15 @@ fn generate_mapper_call(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #vis #async_token fn #fn_name(#fn_args) #output {
-            /// Temporary structure used to serialize function arguments for the SQL template.
+            /// 用于将函数参数序列化到 SQL 模板的临时结构体。
             #args_struct_def
             #args_struct_init
             let __uorm_namespace: &'static str = #namespace_tokens;
             let __uorm_id: &'static str = #id_lit;
             let __uorm_db_name: &'static str = #db_name_lit;
 
-            // Inject a local `exec!()` macro into the function body.
-            // This local macro captures the context (namespace, id, db_name) and
-            // performs the actual database call.
+            // 在函数体内注入本地 `exec!()` 宏
+            // 该宏捕获上下文（namespace、id、db_name）并执行数据库调用
             macro_rules! exec {
                 () => {{
                     let __uorm_sql_id = format!("{}.{}", __uorm_namespace, __uorm_id);

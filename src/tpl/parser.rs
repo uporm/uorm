@@ -2,14 +2,14 @@ use crate::tpl::ast::{AstNode, Expr, Op};
 use crate::udbc::value::Value;
 use std::collections::HashMap;
 
-/// Represents a stack frame during template parsing to handle nested tags.
+/// 模板解析时用于处理嵌套标签的栈帧表示。
 ///
-/// When a start tag (like `<if>`) is encountered, a new `TagFrame` is pushed onto the stack.
-/// This allows the parser to keep track of the current tag's attributes and nesting level.
+/// 遇到起始标签（如 `<if>`）时，会将新的 `TagFrame` 入栈，
+/// 以便解析器跟踪当前标签的属性与嵌套层级。
 enum TagFrame {
-    /// An `<if>` tag frame, storing the test expression.
+    /// `<if>` 标签栈帧，保存测试表达式。
     If { test: Expr },
-    /// A `<foreach>` tag frame, storing the iteration details.
+    /// `<foreach>` 标签栈帧，保存迭代细节。
     Foreach {
         item: String,
         collection: String,
@@ -19,60 +19,60 @@ enum TagFrame {
     },
 }
 
-/// A hand-written recursive-descent style parser for the SQL template language.
+/// SQL 模板语言的手写递归下降解析器。
 ///
-/// It supports:
-/// - Plain text (SQL)
-/// - Variable interpolation: `#{var}`
-/// - Conditional logic: `<if test="...">...</if>`
-/// - Iteration: `<foreach item="..." collection="..." ...>...</foreach>`
-/// - Template inclusion: `<include refid="..." />`
+/// 支持：
+/// - 纯文本（SQL）
+/// - 变量插值：`#{var}`
+/// - 条件逻辑：`<if test="...">...</if>`
+/// - 迭代：`<foreach item="..." collection="..." ...>...</foreach>`
+/// - 模板包含：`<include refid="..." />`
 ///
-/// The parser uses a stack-based approach to handle nested tags correctly.
+/// 解析器使用基于栈的方法正确处理嵌套标签。
 struct Parser<'a> {
-    /// The original template string being parsed.
+    /// 正在解析的原始模板字符串。
     template: &'a str,
-    /// Current character position in the template.
+    /// 当前在模板中的字符位置。
     pos: usize,
-    /// A stack of node collections. Each level corresponds to the children of a nested tag.
-    /// The first element is always the root-level nodes.
+    /// 节点集合栈。每一层对应一个嵌套标签的子节点集合。
+    /// 第一层始终是根节点集合。
     nodes_stack: Vec<Vec<AstNode>>,
-    /// A stack of active tags being parsed.
+    /// 正在解析的活动标签栈。
     tag_stack: Vec<TagFrame>,
 }
 
 impl<'a> Parser<'a> {
-    /// Creates a new parser instance for the given template string.
+    /// 基于给定模板字符串创建解析器实例。
     fn new(template: &'a str) -> Self {
         Self {
             template,
             pos: 0,
-            nodes_stack: vec![Vec::new()], // Initialize with root level.
+            nodes_stack: vec![Vec::new()], // 使用根层初始化
             tag_stack: Vec::new(),
         }
     }
 
-    /// Parses the entire template and returns a list of root-level `AstNode`s.
+    /// 解析完整模板并返回根级 `AstNode` 列表。
     fn parse(mut self) -> Vec<AstNode> {
         while self.pos < self.template.len() {
-            // Try to parse structured elements (tags or variables) first.
+            // 先尝试解析结构化元素（标签或变量）
             if self.try_parse_tag() || self.try_parse_var() {
                 continue;
             }
 
-            // Fallback: parse as plain text if no structured elements match at current position.
+            // 回退：若当前位置没有结构化元素则按纯文本解析
             self.parse_text();
         }
 
-        // Close any tags that were left open (e.g., missing </if>).
+        // 关闭所有未闭合标签（如缺少 </if>）
         self.close_remaining_tags();
 
-        // Return the root-level nodes.
+        // 返回根级节点
         self.nodes_stack.pop().unwrap_or_default()
     }
 
-    /// Try to parse a tag: `<if>`, `</if>`, `<foreach>`, `</foreach>`, `<include>`.
-    /// Returns true if a tag was successfully parsed and consumed.
+    /// 尝试解析标签：`<if>`、`</if>`、`<foreach>`、`</foreach>`、`<include>`。
+    /// 若标签成功解析并消费则返回 true。
     fn try_parse_tag(&mut self) -> bool {
         let remaining = &self.template[self.pos..];
 
@@ -92,10 +92,10 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// Handle <if test="...">
+    /// 处理 <if test="...">
     fn handle_if_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[4..end_idx]; // Skip "<if "
+            let tag_content = &remaining[4..end_idx]; // 跳过 "<if "
             let attrs = parse_attributes(tag_content);
             if let Some(test_str) = attrs.get("test") {
                 let test = parse_expr(test_str);
@@ -108,10 +108,10 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// Handle <foreach item="..." collection="...">
+    /// 处理 <foreach item="..." collection="...">
     fn handle_foreach_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[9..end_idx]; // Skip "<foreach "
+            let tag_content = &remaining[9..end_idx]; // 跳过 "<foreach "
             let attrs = parse_attributes(tag_content);
             if let (Some(item), Some(collection)) = (attrs.get("item"), attrs.get("collection")) {
                 let open = attrs.get("open").map(|s| s.as_str()).unwrap_or("");
@@ -133,10 +133,10 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// Handle <include refid="..." />
+    /// 处理 <include refid="..." />
     fn handle_include_tag(&mut self, remaining: &str) -> bool {
         if let Some(end_idx) = find_tag_end(remaining) {
-            let tag_content = &remaining[8..end_idx]; // Skip "<include"
+            let tag_content = &remaining[8..end_idx]; // 跳过 "<include"
             let attrs = parse_attributes(tag_content);
             if let Some(refid) = attrs.get("refid") {
                 self.append_node(AstNode::Include {
@@ -149,7 +149,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// Handle closing tags `</if>` and `</foreach>`.
+    /// 处理结束标签 `</if>` 与 `</foreach>`。
     fn handle_close_tag(&mut self, remaining: &str) -> bool {
         if remaining.starts_with("</if>")
             && let Some(TagFrame::If { .. }) = self.tag_stack.last()
@@ -194,8 +194,8 @@ impl<'a> Parser<'a> {
             let whitespace_len = text.len() - trimmed.len();
             let whitespace = &text[..whitespace_len];
 
-            // Only trim if the whitespace contains a newline (block formatting).
-            // If it's just spaces (inline formatting), preserve it.
+            // 仅在空白包含换行时裁剪（块级格式）
+            // 若仅为空格（行内格式）则保留
             if whitespace.contains('\n') {
                 if trimmed.is_empty() {
                     nodes.remove(0);
@@ -205,7 +205,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // After potential removal, check last (which might be the same node if len=1)
+        // 可能删除后再检查末尾（len=1 时可能是同一节点）
         if let Some(AstNode::Text(text)) = nodes.last_mut() {
             let trimmed = text.trim_end();
             let whitespace = &text[trimmed.len()..];
@@ -220,7 +220,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Try to parse a variable expression: `#{var}`.
+    /// 尝试解析变量表达式：`#{var}`。
     fn try_parse_var(&mut self) -> bool {
         let remaining = &self.template[self.pos..];
         if remaining.starts_with("#{")
@@ -236,7 +236,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// Consume text until the next special sequence (`'<'` or `"#{"`).
+    /// 消费文本直到下一个特殊序列（`'<'` 或 `"#{"`）。
     fn parse_text(&mut self) {
         let remaining = &self.template[self.pos..];
         let next_tag = remaining.find('<').unwrap_or(remaining.len());
@@ -247,21 +247,21 @@ impl<'a> Parser<'a> {
             self.append_text(&remaining[..next_stop]);
             self.pos += next_stop;
         } else {
-            // Either no tag was found, or we're at a tag/var boundary that didn't parse.
-            // Consume one character to make progress and avoid infinite loops.
+            // 要么未找到标签，要么处于未解析成功的标签/变量边界
+            // 消费一个字符以推进并避免死循环
             self.append_text(&remaining[0..1]);
             self.pos += 1;
         }
     }
 
-    /// Append a node to the current active scope.
+    /// 向当前活动作用域追加节点。
     fn append_node(&mut self, node: AstNode) {
         if let Some(nodes) = self.nodes_stack.last_mut() {
             nodes.push(node);
         }
     }
 
-    /// Append text, merging with the previous text node when possible.
+    /// 追加文本，尽可能与上一个文本节点合并。
     fn append_text(&mut self, text: &str) {
         if let Some(nodes) = self.nodes_stack.last_mut() {
             if let Some(AstNode::Text(last_text)) = nodes.last_mut() {
@@ -272,7 +272,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Auto-close any remaining unclosed tags at the end of the template.
+    /// 在模板末尾自动闭合所有未闭合标签。
     fn close_remaining_tags(&mut self) {
         while let Some(tag) = self.tag_stack.pop() {
             let mut body = self.nodes_stack.pop().unwrap_or_default();
@@ -300,12 +300,12 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Main entry point: parse a template string into an AST.
+/// 主入口：将模板字符串解析为 AST。
 pub fn parse_template(template: &str) -> Vec<AstNode> {
     Parser::new(template).parse()
 }
 
-/// Find the index of the closing `>` for a tag, ignoring quoted content.
+/// 查找标签闭合 `>` 的索引，忽略引号内内容。
 fn find_tag_end(s: &str) -> Option<usize> {
     let mut in_quote = false;
     for (i, c) in s.char_indices() {
@@ -318,7 +318,7 @@ fn find_tag_end(s: &str) -> Option<usize> {
     None
 }
 
-/// Parse attributes from tag content into a HashMap
+/// 从标签内容解析属性为 HashMap
 fn parse_attributes(content: &str) -> HashMap<String, String> {
     let mut attrs = HashMap::new();
 
@@ -329,26 +329,26 @@ fn parse_attributes(content: &str) -> HashMap<String, String> {
             break;
         }
 
-        // Find key end
+        // 查找 key 结束位置
         let key_end = rest
             .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
             .unwrap_or(rest.len());
         if key_end == 0 {
-            // Should not happen if trim_start worked and we have valid chars.
-            // Consume one char to avoid infinite loop if garbage present
+            // 若 trim_start 正常且字符有效，理论上不会发生
+            // 若存在脏数据，消费一个字符以避免死循环
             rest = &rest[1..];
             continue;
         }
         let key = &rest[..key_end];
         rest = rest[key_end..].trim_start();
 
-        // Expect '='
+        // 期待 '='
         if !rest.starts_with('=') {
             continue;
         }
         rest = rest[1..].trim_start();
 
-        // Expect quote
+        // 期待引号
         if rest.is_empty() {
             break;
         }
@@ -358,20 +358,20 @@ fn parse_attributes(content: &str) -> HashMap<String, String> {
         }
         rest = &rest[1..];
 
-        // Find matching quote
+        // 查找匹配的引号
         if let Some(val_end) = rest.find(quote) {
             let val = &rest[..val_end];
             attrs.insert(key.to_string(), val.to_string());
             rest = &rest[val_end + 1..];
         } else {
-            break; // Unclosed quote
+            break; // 引号未闭合
         }
     }
     attrs
 }
 
 fn parse_expr(input: &str) -> Expr {
-    // 1. Split by OR
+    // 1. 按 OR 拆分
     let parts: Vec<&str> = input.split(" or ").collect();
     if parts.len() > 1 {
         let mut expr = parse_and_expr(parts[0]);
@@ -397,7 +397,7 @@ fn parse_and_expr(input: &str) -> Expr {
 
 fn parse_atom(input: &str) -> Expr {
     let input = input.trim();
-    // Check operators. Order matters (longest first).
+    // 检查运算符，顺序很重要（最长优先）
     let ops = [
         ("!=", Op::Ne),
         ("==", Op::Eq),
@@ -413,7 +413,7 @@ fn parse_atom(input: &str) -> Expr {
         }
     }
 
-    // Implicit boolean check
+    // 隐式布尔判断
     parse_val(input)
 }
 
@@ -437,7 +437,7 @@ fn parse_val(input: &str) -> Expr {
     if let Ok(n) = s.parse::<f64>() {
         return Expr::Literal(Value::F64(n));
     }
-    // Variable
+    // 变量
     Expr::Var(s.to_string())
 }
 

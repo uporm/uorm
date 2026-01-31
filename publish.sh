@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e   # Exit immediately if any command fails
+set -e   # 任一命令失败立即退出
 
 ROOT_DIR=$(pwd)
 
@@ -8,21 +8,21 @@ echo "📦 Rust workspace 单个项目发布脚本"
 echo ""
 
 # -----------------------------
-# Discover workspace crates
+# 发现 workspace crates
 # -----------------------------
 echo "📚 获取 workspace crate 列表..."
 
-# Build a JSON stream of {name, manifest_path} for workspace packages
+# 构建 workspace 包的 {name, manifest_path} JSON 流
 PACKAGES_JSON=$(cargo metadata --no-deps --format-version=1 \
     | jq -c '.packages[] | select(.source == null) | {name: .name, path: .manifest_path}')
 
 echo "🧩 发现以下 crates："
-# Print the list for reference
+# 打印列表以便参考
 echo "$PACKAGES_JSON" | jq -r '"- " + .name'
 echo ""
 
 # -----------------------------
-# User input
+# 用户输入
 # -----------------------------
 read -p "请输入要发布的工程名称: " TARGET_NAME
 
@@ -32,9 +32,9 @@ if [ -z "$TARGET_NAME" ]; then
 fi
 
 # -----------------------------
-# Locate target crate
+# 定位目标 crate
 # -----------------------------
-# Use jq to pick the matching manifest_path
+# 使用 jq 选出匹配的 manifest_path
 MANIFEST=$(echo "$PACKAGES_JSON" | jq -r --arg name "$TARGET_NAME" 'select(.name == $name) | .path')
 
 if [ -z "$MANIFEST" ]; then
@@ -54,7 +54,7 @@ cd "$DIR"
 
 echo "🧪 执行 dry-run..."
 
-# Capture stderr/stdout on failure
+# 失败时捕获标准输出与标准错误
 if ! OUTPUT=$(cargo publish --dry-run 2>&1); then
     echo "❌ dry-run 失败：$TARGET_NAME"
     echo "   👉 错误信息："
@@ -64,7 +64,7 @@ fi
 
 echo "✔ dry-run 成功：$TARGET_NAME"
 
-# Publish directly without additional confirmation
+# 不再二次确认，直接发布
 echo "🚀 正在发布 $TARGET_NAME ..."
 
 if ! OUTPUT=$(cargo publish 2>&1); then

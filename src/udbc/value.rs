@@ -22,25 +22,25 @@ pub enum Value {
     F32(f32),
     F64(f64),
     Bytes(Vec<u8>),
-    /// Date without time zone
+    /// 不带时区的日期
     Date(NaiveDate),
 
-    /// Time without date
+    /// 不带日期的时间
     Time(NaiveTime),
 
-    /// Date and time without time zone
+    /// 不带时区的日期时间
     DateTime(NaiveDateTime),
 
-    /// Date and time in UTC
+    /// UTC 日期时间
     DateTimeUtc(DateTime<Utc>),
 
-    /// Arbitrary-precision decimal number
+    /// 任意精度十进制数
     Decimal(Decimal),
 
-    /// Ordered list of values (e.g. arrays, tuples)
+    /// 有序值列表（如数组、元组）
     List(Vec<Value>),
 
-    /// Key-value map (e.g. structs, JSON objects)
+    /// 键值映射（如结构体、JSON 对象）
     Map(HashMap<String, Value>),
 }
 
@@ -281,21 +281,21 @@ impl FromValue for f64 {
     }
 }
 
-// Allow Value to be passed as argument
+// 允许 Value 作为参数传入
 impl ToValue for Value {
     fn to_value(&self) -> Value {
         self.clone()
     }
 }
 
-// Allow Value to be returned as result
+// 允许 Value 作为结果返回
 impl FromValue for Value {
     fn from_value(v: Value) -> Result<Self, DbError> {
         Ok(v)
     }
 }
 
-// Implement FromValue for unit type () to allow functions returning Result<()>
+// 为 unit 类型 () 实现 FromValue，使函数可返回 Result<()>
 impl FromValue for () {
     fn from_value(_v: Value) -> Result<Self, DbError> {
         Ok(())
@@ -308,7 +308,7 @@ impl ToValue for () {
     }
 }
 
-// Blanket implementation for references
+// 引用的通用实现
 impl<T> ToValue for &T
 where
     T: ToValue + ?Sized,
@@ -318,7 +318,7 @@ where
     }
 }
 
-// Option
+// 可选类型
 impl<T: ToValue> ToValue for Option<T> {
     fn to_value(&self) -> Value {
         match self {
@@ -346,7 +346,7 @@ impl<T: FromValue> FromValue for Option<T> {
     }
 }
 
-// Vec
+// 向量
 impl<T: ToValue> ToValue for Vec<T> {
     fn to_value(&self) -> Value {
         Value::List(self.iter().map(|v| v.to_value()).collect())
@@ -361,7 +361,7 @@ impl<T: FromValue> FromValue for Vec<T> {
     }
 }
 
-// HashMap
+// 哈希映射
 impl<T: ToValue> ToValue for HashMap<String, T> {
     fn to_value(&self) -> Value {
         let mut map = HashMap::new();

@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-/// SQL statement type.
+/// SQL 语句类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StatementType {
     Select,
@@ -32,34 +32,34 @@ impl StatementType {
     }
 }
 
-/// A SQL statement definition (runtime representation).
+/// SQL 语句定义（运行时表示）。
 ///
-/// Holds the parsed SQL template (raw XML inner text) plus metadata.
+/// 保存解析后的 SQL 模板（XML 内部原文）及元数据。
 #[derive(Debug, Clone)]
 pub struct SqlStatement {
-    /// Statement type (SELECT, INSERT, etc.).
+    /// 语句类型（SELECT、INSERT 等）。
     pub r#type: StatementType,
-    /// Database type (mysql, sqlite, postgres, etc.). Optional.
+    /// 数据库类型（mysql、sqlite、postgres 等），可选。
     pub database_type: Option<String>,
-    /// SQL template content (may contain dynamic XML tags).
+    /// SQL 模板内容（可能包含动态 XML 标签）。
     pub content: Option<String>,
-    /// Whether to return the generated key.
+    /// 是否返回生成的主键。
     pub return_key: bool,
 }
 
-/// Statement repository.
+/// 语句仓库。
 ///
-/// Layout: namespace -> (id -> Vec<Arc<SqlStatement>>).
-/// A Vec allows multiple variants under the same id, distinguished by `database_type`.
+/// 结构：namespace -> (id -> Vec<Arc<SqlStatement>>)。
+/// Vec 允许同一 id 下存在多种变体，通过 `database_type` 区分。
 pub type StatementStore = DashMap<String, DashMap<String, Vec<Arc<SqlStatement>>>>;
 
-/// Global singleton storage.
+/// 全局单例存储。
 static STATEMENTS: OnceLock<StatementStore> = OnceLock::new();
 
-/// Load all XML mapper files matched by the given glob pattern.
+/// 按给定 glob 模式加载所有 XML mapper 文件。
 ///
-/// # Parameters
-/// * `pattern` - File path glob pattern, e.g. `"src/resources/**/*.xml"`.
+/// # 参数
+/// * `pattern` - 文件路径 glob 模式，如 `"src/resources/**/*.xml"`。
 pub fn load(pattern: &str) -> Result<()> {
     let paths = glob(pattern)
         .map_err(|e| DbError::MapperLoadError(format!("无效的 glob 模式: {} - {}", pattern, e)))?;
@@ -74,7 +74,7 @@ pub fn load(pattern: &str) -> Result<()> {
     Ok(())
 }
 
-/// Load embedded mapper assets (typically compiled into the binary).
+/// 加载内嵌的 mapper 资源（通常编译进二进制）。
 pub fn load_assets(assets: Vec<(&str, &str)>) -> Result<()> {
     for (source, content) in assets {
         parse_and_register(content, source)?;
@@ -82,18 +82,18 @@ pub fn load_assets(assets: Vec<(&str, &str)>) -> Result<()> {
     Ok(())
 }
 
-/// Find a SQL statement definition by SQL id.
+/// 通过 SQL id 查找 SQL 语句定义。
 ///
-/// # Parameters
-/// * `full_id` - Full SQL id in the form `"namespace.id"`.
-/// * `db_type` - Database type used to pick a DB-specific implementation.
+/// # 参数
+/// * `full_id` - 完整 SQL id，形如 `"namespace.id"`。
+/// * `db_type` - 数据库类型，用于选择特定实现。
 pub fn find_statement(full_id: &str, db_type: &str) -> Option<Arc<SqlStatement>> {
     let (namespace, id) = full_id.rsplit_once('.')?;
 
     let ns_map = STATEMENTS.get()?.get(namespace)?;
     let statements = ns_map.get(id)?;
 
-    // Prefer an entry that matches `database_type`; fall back to the default (`None`) entry.
+    // 优先匹配 `database_type`，否则回退到默认（`None`）项
     let mut fallback = None;
     for stmt in statements.value().iter() {
         match stmt.database_type.as_deref() {
@@ -106,14 +106,14 @@ pub fn find_statement(full_id: &str, db_type: &str) -> Option<Arc<SqlStatement>>
     fallback
 }
 
-/// Clear all loaded statements (mainly to reset state in tests).
+/// 清空所有已加载语句（主要用于测试重置状态）。
 pub fn clear() {
     if let Some(store) = STATEMENTS.get() {
         store.clear();
     }
 }
 
-// --- Internal implementation ---
+// --- 内部实现 ---
 
 fn load_file(path: &Path) -> Result<()> {
     let xml_content = fs::read_to_string(path).map_err(|e| {
@@ -137,7 +137,7 @@ fn parse_and_register(xml_content: &str, source: &str) -> Result<()> {
             *content = content.trim().to_string();
         }
 
-        // Register in template cache for <include> tags.
+        // 注册到模板缓存以支持 <include> 标签
         if let Some(content) = &statement.content {
             let full_id = format!("{}.{}", namespace, statement.id);
             cache::get_ast(&full_id, content);
@@ -145,7 +145,7 @@ fn parse_and_register(xml_content: &str, source: &str) -> Result<()> {
 
         let mut statements = ns_map.entry(statement.id.clone()).or_default();
 
-        // Reject duplicate definitions.
+        // 拒绝重复定义
         if statements
             .iter()
             .any(|s| s.database_type == statement.database_type)
@@ -182,8 +182,7 @@ impl ParsedItem {
 
 fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
     let mut reader = Reader::from_str(xml);
-    // Configure the reader. We trim text nodes to simplify parsing; buffer-position slicing is
-    // based on the original XML and is not affected by trimming.
+    // 配置 reader。裁剪文本节点以简化解析；buffer_position 基于原始 XML，不受裁剪影响。
     reader.config_mut().trim_text(true);
 
     let mut namespace = None;
@@ -207,16 +206,16 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
                     let database_type = get_attribute(e, "databaseType");
                     let return_key = parse_bool(get_attribute(e, "returnKey").as_deref());
 
-                    // Use the end of the start tag as the content start position.
+                    // 以起始标签末尾作为内容开始位置。
                     let start_pos = reader.buffer_position() as usize;
 
-                    // Read until we reach the matching end tag.
+                    // 读取直到匹配到结束标签。
                     let end_pos = read_until_end_tag(&mut reader, &name_str, &mut Vec::new())?;
 
-                    // Compute the content end position.
-                    // After reading the end tag, `buffer_position()` points to the position right
-                    // after it. The end tag format is `</tag>` -> 3 + tag_len bytes.
-                    // Note: in quick-xml 0.3x, `buffer_position()` is an absolute offset.
+                    // 计算内容结束位置。
+                    // 读取结束标签后，`buffer_position()` 指向其后的位置。
+                    // 结束标签格式为 `</tag>` -> 3 + tag_len 字节。
+                    // 注意：quick-xml 0.3x 中 `buffer_position()` 是绝对偏移。
 
                     let tag_len = name.as_ref().len();
 
@@ -229,8 +228,8 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
 
                     let content = if content_end > start_pos {
                         let raw_content = &xml[start_pos..content_end];
-                        // Unescape XML entities like &lt;, &gt;, &amp;, etc.
-                        // The template parser expects raw characters.
+                        // 反转义 XML 实体，如 &lt;、&gt;、&amp; 等。
+                        // 模板解析器需要原始字符。
                         quick_xml::escape::unescape(raw_content)
                             .map(|s| s.into_owned())
                             .ok()
@@ -265,7 +264,7 @@ fn parse_xml(xml: &str, source: &str) -> Result<(String, Vec<ParsedItem>)> {
     Ok((namespace, items))
 }
 
-// Helper: read until the matching end tag is found, and return the position right after it.
+// 辅助：读取直到匹配的结束标签，并返回其后的位置。
 fn read_until_end_tag(
     reader: &mut Reader<&[u8]>,
     target_tag: &str,

@@ -22,16 +22,16 @@ impl<'a> Context<'a> {
     }
 
     pub fn lookup(&self, key: &str) -> &'a Value {
-        // 1) Try an exact match (locals or a direct key on the root object).
+        // 1) 尝试精确匹配（locals 或根对象的直接 key）
         if let Some(v) = self.get_from_scope(key) {
             return v;
         }
 
-        // 2) Try dotted-path lookup (e.g. "user.name").
+        // 2) 尝试点路径查找（如 "user.name"）
         if let Some((head, rest)) = key.split_once('.') {
-            // Resolve the first segment.
+            // 解析第一段
             if let Some(head_value) = self.get_from_scope(head) {
-                // Then resolve the remaining path.
+                // 再解析剩余路径
                 if let Some(target) = Self::resolve_path(head_value, rest) {
                     return target;
                 }
@@ -42,12 +42,12 @@ impl<'a> Context<'a> {
     }
 
     fn get_from_scope(&self, key: &str) -> Option<&'a Value> {
-        // 1. Try exact match
+        // 1. 尝试精确匹配
         if let Some(v) = self.find_exact(key) {
             return Some(v);
         }
 
-        // 2. Try converting key from camelCase to snake_case
+        // 2. 尝试将 key 从 camelCase 转为 snake_case
         if let Some(snake_key) = to_snake_case(key) {
             return self.find_exact(&snake_key);
         }
@@ -55,14 +55,14 @@ impl<'a> Context<'a> {
         None
     }
 
-    /// Helper to find a value by exact key match in locals or root
+    /// 在 locals 或 root 中按精确 key 查找值
     fn find_exact(&self, key: &str) -> Option<&'a Value> {
-        // 1. Prioritize local variables (Stack structure, search backwards to support shadowing)
+        // 1. 优先本地变量（栈结构，反向搜索以支持遮蔽）
         if let Some((_, v)) = self.locals.iter().rev().find(|(k, _)| k == key) {
             return Some(v);
         }
 
-        // 2. Search root object
+        // 2. 搜索根对象
         if let Value::Map(m) = self.root {
             return m.get(key);
         }
@@ -70,7 +70,7 @@ impl<'a> Context<'a> {
         None
     }
 
-    /// Resolve a dot-separated path within a `Value` (maps only).
+    /// 在 `Value` 中解析点分路径（仅支持 Map）。
     fn resolve_path(mut current: &'a Value, path: &str) -> Option<&'a Value> {
         for part in path.split('.') {
             match current {
@@ -78,7 +78,7 @@ impl<'a> Context<'a> {
                     if let Some(v) = m.get(part) {
                         current = v;
                     } else if let Some(snake_part) = to_snake_case(part) {
-                        // Try snake_case fallback
+                        // 尝试 snake_case 兜底
                         if let Some(v) = m.get(&snake_part) {
                             current = v;
                         } else {
@@ -95,8 +95,8 @@ impl<'a> Context<'a> {
     }
 }
 
-/// Converts a camelCase string to snake_case.
-/// Returns None if the string does not contain uppercase letters (no conversion needed).
+/// 将 camelCase 字符串转换为 snake_case。
+/// 若字符串不包含大写字母（无需转换）则返回 None。
 fn to_snake_case(s: &str) -> Option<String> {
     if !s.chars().any(|c| c.is_uppercase()) {
         return None;
@@ -170,7 +170,7 @@ mod tests {
 
         ctx.push("a.b", &Value::I64(3));
 
-        // "a.b" should be found in locals as exact match
+        // "a.b" 应该在 locals 中按精确匹配找到
         assert_eq!(ctx.lookup("a.b"), &Value::I64(3));
     }
 
@@ -181,7 +181,7 @@ mod tests {
         let root = Value::Map(map);
         let ctx = Context::new(&root);
 
-        // Should find "tenant_id" when looking up "tenantId"
+        // 查找 "tenantId" 时应命中 "tenant_id"
         assert_eq!(ctx.lookup("tenantId"), &Value::U64(123));
     }
 
@@ -196,7 +196,7 @@ mod tests {
         let root = Value::Map(map);
         let ctx = Context::new(&root);
 
-        // "userProfile.firstName" -> "user_profile" -> "first_name"
+        // "userProfile.firstName" 解析为 "user_profile" 再到 "first_name"
         assert_eq!(
             ctx.lookup("userProfile.firstName"),
             &Value::Str("John".to_string())

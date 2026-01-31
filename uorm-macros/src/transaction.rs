@@ -39,31 +39,34 @@ pub fn transaction_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let db_name_lit = LitStr::new(&db_name, proc_macro2::Span::call_site());
     let new_block = quote! {
         {
-            let __uorm_mapper = uorm::driver_manager::U
-                .mapper_by_name(#db_name_lit)
-                .expect("Database driver not found");
-            let __uorm_session = uorm::executor::session::Session::new(__uorm_mapper.pool.clone());
+            uorm::executor::session::with_tx_context(|| async move {
+                let __uorm_mapper = uorm::driver_manager::U
+                    .mapper_by_name(#db_name_lit)
+                    .expect("Database driver not found");
+                let __uorm_session = uorm::executor::session::Session::new(__uorm_mapper.pool.clone());
 
-            let __uorm_tx_started = !__uorm_session.is_transaction_active();
-            if __uorm_tx_started {
-                if let Err(e) = __uorm_session.begin().await {
-                    return uorm::TransactionResult::from_db_error(e);
-                }
-            }
-
-            let result = (async #block).await;
-
-            if __uorm_tx_started {
-                if uorm::TransactionResult::is_ok(&result) {
-                    if let Err(e) = __uorm_session.commit().await {
+                let __uorm_tx_started = !__uorm_session.is_transaction_active();
+                if __uorm_tx_started {
+                    if let Err(e) = __uorm_session.begin().await {
                         return uorm::TransactionResult::from_db_error(e);
                     }
-                } else {
-                    let _ = __uorm_session.rollback().await;
                 }
-            }
 
-            result
+                let result = (async #block).await;
+
+                if __uorm_tx_started {
+                    if uorm::TransactionResult::is_ok(&result) {
+                        if let Err(e) = __uorm_session.commit().await {
+                            return uorm::TransactionResult::from_db_error(e);
+                        }
+                    } else {
+                        let _ = __uorm_session.rollback().await;
+                    }
+                }
+
+                result
+            })
+            .await
         }
     };
 

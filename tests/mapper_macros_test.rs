@@ -1,4 +1,4 @@
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 use uorm::Param;
 use uorm::Result;
 use uorm::driver_manager::U;
@@ -7,6 +7,7 @@ use uorm::udbc::mysql::pool::MysqlDriver;
 #[cfg(feature = "sqlite")]
 use uorm::udbc::sqlite::pool::SqliteDriver;
 use uorm::{mapper_assets, sql};
+use tokio::sync::Mutex;
 
 #[derive(Debug, Param)]
 struct User {
@@ -111,22 +112,25 @@ impl UserDao {
 }
 
 static INIT: Once = Once::new();
+static TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-// Use mapper_assets to load the XML at compile time
+// 使用 mapper_assets 在编译期加载 XML
 mapper_assets!["tests/resources/mapper"];
 
 async fn setup_db() -> Box<dyn uorm::udbc::connection::Connection> {
-    // Only init logger once
+    // 仅初始化一次日志
     INIT.call_once(|| {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
     });
 
-    // Re-register driver for every test to ensure pool is bound to current runtime
+    // 每个测试都重新注册驱动，确保连接池绑定当前运行时
     #[cfg(feature = "sqlite")]
     {
         let url = "sqlite:file:macro_test?mode=memory&cache=shared";
         let driver = SqliteDriver::new(url).build().unwrap();
-        U.register(driver).unwrap();
+        if U.session().is_none() {
+            U.register(driver).unwrap();
+        }
     }
 
     #[cfg(feature = "mysql")]
@@ -134,7 +138,9 @@ async fn setup_db() -> Box<dyn uorm::udbc::connection::Connection> {
         let url = "mysql://username:password@192.168.1.118:2881/test";
         println!("Connecting to MySQL URL: {}", url);
         let driver = MysqlDriver::new(url).build().unwrap();
-        U.register(driver).unwrap();
+        if U.session().is_none() {
+            U.register(driver).unwrap();
+        }
     }
 
     let mapper = U.mapper().unwrap();
@@ -160,7 +166,7 @@ async fn setup_db() -> Box<dyn uorm::udbc::connection::Connection> {
         create_time DATETIME DEFAULT CURRENT_TIMESTAMP
     )";
 
-    // Drop table to ensure clean state for each test (since we use AUTO_INCREMENT)
+    // 删除表以保证每个测试状态干净（使用 AUTO_INCREMENT）
     conn.execute("DROP TABLE IF EXISTS users", &[]).await.unwrap();
     conn.execute(create_sql, &[]).await.unwrap();
     conn
@@ -168,24 +174,25 @@ async fn setup_db() -> Box<dyn uorm::udbc::connection::Connection> {
 
 #[tokio::test]
 async fn test_user_dao_macros() {
+    let _guard = TEST_LOCK.lock().await;
     let _conn = setup_db().await;
 
-    // 1. Test insert
+    // 1. 测试 insert
     let affected = UserDao::insert("Alice".to_string(), 20).await.unwrap();
     assert!(affected >= 0);
 
-    // 1.1 Test insert_borrowed
+    // 1.1 测试 insert_borrowed
     let affected = UserDao::insert_borrowed("AliceBorrowed", 21).await.unwrap();
     assert!(affected >= 0);
 
-    // 1.2 Test insert_struct
+    // 1.2 测试 insert_struct
     let params = InsertParams {
         name: "AliceStruct".to_string(),
         age: 22,
     };
     let _ = UserDao::insert_struct(params).await.unwrap();
 
-    // Verify insertion
+    // 校验插入结果
     let users = UserDao::list_all().await.unwrap();
     let user = users
         .iter()
@@ -193,23 +200,23 @@ async fn test_user_dao_macros() {
         .expect("AliceStruct not found");
     assert_eq!(user.age, Some(22));
 
-    // 1.3 Test insert_map
+    // 1.3 测试 insert_map
     let mut map = std::collections::HashMap::new();
     map.insert("name".to_string(), "AliceMap".to_string());
     map.insert("age".to_string(), "23".to_string());
     let _ = UserDao::insert_map(map).await.unwrap();
 
-    // Verify insertion
+    // 校验插入结果
     let users = UserDao::list_all().await.unwrap();
     let user = users
         .iter()
         .find(|u| u.name.as_deref() == Some("AliceMap"))
         .expect("AliceMap not found");
-    // SQLite might return 23 as i32 even if inserted as string, due to column affinity.
-    // But let's check.
+    // SQLite 可能因列亲和性把字符串 23 以 i32 返回
+    // 这里继续校验
     assert_eq!(user.age, Some(23));
 
-    // 2. Test get_by_id
+    // 2. 测试 get_by_id
     let users = UserDao::get_by_id(1).await.unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name.as_deref(), Some("Alice"));
@@ -225,12 +232,12 @@ async fn test_user_dao_macros() {
     let missing_err = UserDao::get_one_by_id(999).await.unwrap_err();
     assert!(matches!(missing_err, uorm::error::DbError::DbError(_)));
 
-    // 3. Test list_all
+    // 3. 测试 list_all
     UserDao::insert("Bob".to_string(), 30).await.unwrap();
     let users = UserDao::list_all().await.unwrap();
     assert!(users.len() >= 2);
 
-    // 4. Test update
+    // 4. 测试 update
     let alice_id = users
         .iter()
         .find(|u| u.name.as_deref() == Some("Alice"))
@@ -240,13 +247,14 @@ async fn test_user_dao_macros() {
     let affected = UserDao::update_age(alice_id, 21).await.unwrap();
     assert_eq!(affected, 1);
 
-    // 5. Verify update
+    // 5. 校验更新结果
     let updated_users = UserDao::get_by_id_named(alice_id).await.unwrap();
     assert_eq!(updated_users[0].age, Some(21));
 }
 
 #[tokio::test]
 async fn test_date_formats() {
+    let _guard = TEST_LOCK.lock().await;
     let _conn = setup_db().await;
 
     macro_rules! test_date_format {
@@ -263,7 +271,7 @@ async fn test_date_formats() {
             let db_val = user.create_time.as_deref().unwrap_or("").replace("T", " ");
             let expected = $date.replace("T", " ");
             
-            // Handle incomplete date string (e.g. "2023-10-01" vs "2023-10-01 00:00:00")
+            // 处理不完整日期字符串（如 "2023-10-01" 与 "2023-10-01 00:00:00"）
             if !db_val.contains(&expected) && !expected.contains(&db_val) {
                  assert_eq!(db_val, expected);
             }
@@ -277,11 +285,12 @@ async fn test_date_formats() {
 
 #[tokio::test]
 async fn test_sum_age() {
+    let _guard = TEST_LOCK.lock().await;
     let mut conn = setup_db().await;
-    // Clean up to ensure deterministic result
+    // 清理以确保结果确定
     conn.execute("DELETE FROM users", &[]).await.unwrap();
 
-    // Insert some users
+    // 插入一些用户
     UserDao::insert("User1".to_string(), 10).await.unwrap();
     UserDao::insert("User2".to_string(), 20).await.unwrap();
     UserDao::insert("User3".to_string(), 30).await.unwrap();
@@ -292,13 +301,14 @@ async fn test_sum_age() {
 
 #[tokio::test]
 async fn test_sum_age_group_by_name() {
+    let _guard = TEST_LOCK.lock().await;
     let mut conn = setup_db().await;
-    // Clean up
+    // 清理
     conn.execute("DELETE FROM users", &[]).await.unwrap();
 
-    // Insert users:
-    // Group A: 10 + 20 = 30
-    // Group B: 30
+    // 插入用户：
+    // 组 A：10 + 20 = 30
+    // 组 B：30
     UserDao::insert("GroupA".to_string(), 10).await.unwrap();
     UserDao::insert("GroupA".to_string(), 20).await.unwrap();
     UserDao::insert("GroupB".to_string(), 30).await.unwrap();
@@ -307,11 +317,11 @@ async fn test_sum_age_group_by_name() {
     
     assert_eq!(stats_list.len(), 2);
     
-    // GroupA
+    // 组 A
     assert_eq!(stats_list[0].name.as_deref(), Some("GroupA"));
     assert_eq!(stats_list[0].age_sum, Some(30));
 
-    // GroupB
+    // 组 B
     assert_eq!(stats_list[1].name.as_deref(), Some("GroupB"));
     assert_eq!(stats_list[1].age_sum, Some(30));
 }

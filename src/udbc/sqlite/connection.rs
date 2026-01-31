@@ -7,13 +7,13 @@ use async_trait::async_trait;
 use rusqlite::params_from_iter;
 use std::collections::HashMap;
 
-/// Connection implementation for SQLite.
+/// SQLite 的连接实现。
 ///
-/// Wraps a `rusqlite::Connection` and executes queries in a blocking thread
-/// to be compatible with async runtime (tokio).
+/// 包装 `rusqlite::Connection` 并在阻塞线程中执行查询，
+/// 以兼容异步运行时（tokio）。
 pub struct SqliteConnection {
-    /// The underlying SQLite connection.
-    /// Wrapped in Option to allow moving it into the blocking task.
+    /// 底层 SQLite 连接。
+    /// 使用 Option 包裹以便移入阻塞任务。
     conn: Option<rusqlite::Connection>,
 }
 
@@ -22,10 +22,9 @@ impl SqliteConnection {
         Self { conn: Some(conn) }
     }
 
-    /// Helper method to run a blocking closure with the database connection.
+    /// 使用数据库连接执行阻塞闭包的辅助方法。
     ///
-    /// This method handles the boilerplate of moving the connection into a `spawn_blocking` task
-    /// and moving it back after execution.
+    /// 该方法负责将连接移入 `spawn_blocking` 任务并在执行后移回。
     async fn run_blocking<F, T>(&mut self, f: F) -> Result<T>
     where
         F: FnOnce(&mut rusqlite::Connection) -> std::result::Result<T, rusqlite::Error>
@@ -33,14 +32,14 @@ impl SqliteConnection {
             + 'static,
         T: Send + 'static,
     {
-        // Take the connection from the struct.
-        // If it's None, it means the connection was lost (e.g., due to a previous panic).
+        // 从结构体中取出连接
+        // 若为 None，表示连接已丢失（如之前发生 panic）
         let conn = self
             .conn
             .take()
             .ok_or_else(|| DbError::DbError("Connection closed".to_string()))?;
 
-        // Spawn a blocking task to run the database operation.
+        // 启动阻塞任务执行数据库操作
         let (conn, result): (rusqlite::Connection, std::result::Result<T, rusqlite::Error>) = tokio::task::spawn_blocking(move || -> (rusqlite::Connection, std::result::Result<T, rusqlite::Error>) {
             let mut conn = conn;
             let result = f(&mut conn);
@@ -49,10 +48,10 @@ impl SqliteConnection {
         .await
         .map_err(|e: tokio::task::JoinError| DbError::DbError(format!("Task failed: {}", e)))?;
 
-        // Put the connection back.
+        // 放回连接
         self.conn = Some(conn);
 
-        // Return the result of the database operation.
+        // 返回数据库操作结果
         result.map_err(|e: rusqlite::Error| DbError::DbError(e.to_string()))
     }
 }
@@ -65,7 +64,7 @@ impl Connection for SqliteConnection {
         args: &[(String, Value)],
     ) -> Result<Vec<HashMap<String, Value>>> {
         let sql = sql.to_string();
-        // Convert arguments to SQLite values.
+        // 将参数转换为 SQLite 值
         let params = args
             .iter()
             .map(|(_, v)| to_sqlite_value(v))
@@ -75,7 +74,7 @@ impl Connection for SqliteConnection {
             let mut stmt = conn.prepare(&sql)?;
             let column_count = stmt.column_count();
 
-            // pre-allocate column names to avoid repeated lookups
+            // 预先分配列名，避免重复查询
             let column_names: Vec<String> = (0..column_count)
                 .map(|i| {
                     stmt.column_name(i)
@@ -117,7 +116,7 @@ impl Connection for SqliteConnection {
     async fn last_insert_id(&mut self) -> Result<u64> {
         self.run_blocking(|conn| {
             let id = conn.last_insert_rowid();
-            // Ensure non-negative ID, though rowid is usually i64.
+            // 确保 ID 非负，尽管 rowid 通常为 i64
             Ok(id.max(0) as u64)
         })
         .await
