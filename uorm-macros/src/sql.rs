@@ -109,11 +109,12 @@ fn sql_namespace_impl(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let item_struct = parse_macro_input!(input as ItemStruct);
     let struct_name = &item_struct.ident;
+    let struct_ident = syn::Ident::new(&struct_name.to_string(), Span::call_site());
 
     let expanded = quote! {
         #item_struct
 
-        impl #struct_name {
+        impl #struct_ident {
             /// 与该结构体关联的 SQL 语句默认 XML 命名空间。
             pub const NAMESPACE: &'static str = #namespace;
         }

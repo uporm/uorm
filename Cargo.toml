@@ -13,12 +13,12 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.4"
+version = "0.7.5"
 edition = "2024"
 
 
 [dependencies]
-uorm-macros = { version = "0.7.4", path = "uorm-macros" }
+uorm-macros = { version = "0.7.5", path = "uorm-macros" }
 serde = { version = "1.0.228", features = ["derive"] }
 quick-xml = { version = "0.38.4", features = ["serialize"] }
 dashmap = "7.0.0-rc2"
@@ -33,12 +33,8 @@ ctor = "0.6.3"
 glob = "0.3.3"
 thiserror = "2.0.17"
 
-[dev-dependencies]
-env_logger = "0.11.6"
-
-
 [features]
-default = ["sqlite"]
+default = ["mysql"]
 mysql = ["dep:mysql_async"]
 sqlite = ["dep:rusqlite"]
 

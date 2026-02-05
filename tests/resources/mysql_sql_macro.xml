@@ -1,0 +1,18 @@
+<mapper namespace="user">
+    <sql id="create_table" databaseType="mysql">
+        CREATE TABLE IF NOT EXISTS kb_document_chunk (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            state INT NOT NULL
+        )
+    </sql>
+    <insert id="insert_chunk" databaseType="mysql" returnKey="true">
+        INSERT INTO kb_document_chunk(state) VALUES (#{state})
+    </insert>
+    <select id="state_stats" databaseType="mysql">
+        SELECT 
+            COUNT(*) as total, 
+            COALESCE(SUM(CASE WHEN state = 3 THEN 1 ELSE 0 END), 0) as completedCount, 
+            COALESCE(SUM(CASE WHEN state = 4 THEN 1 ELSE 0 END), 0) as failedCount 
+        FROM kb_document_chunk
+    </select>
+</mapper>
