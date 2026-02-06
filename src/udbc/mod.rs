@@ -8,6 +8,8 @@ pub mod value;
 
 pub use value::Value;
 
+use std::collections::HashMap;
+
 pub const DEFAULT_DB_NAME: &str = "default";
 
 pub struct PoolOptions {
@@ -15,4 +17,5 @@ pub struct PoolOptions {
     pub max_idle_conns: u64, // Set the maximum number of idle connections in the pool
     pub max_lifetime: u64,   // Set the maximum lifetime of a connection
     pub timeout: u64,        // Set the timeout for getting a connection from the pool
+    pub extra_params: HashMap<String, String>,
 }
