@@ -70,7 +70,10 @@ impl MysqlDriver {
 
         if let Some(options) = self.options.as_mut() {
             if !url_params.is_empty() {
-                options.extra_params.extend(url_params);
+                match options.extra_params.as_mut() {
+                    Some(params) => params.extend(url_params),
+                    None => options.extra_params = Some(url_params),
+                }
             }
         }
 
@@ -161,20 +164,22 @@ impl Driver for MysqlDriver {
         .map_err(|e| self.err_context(e))?;
 
         if let Some(options) = &self.options {
-            if !options.extra_params.is_empty() {
-                for (key, value) in &options.extra_params {
-                    if !is_valid_param_key(key) {
-                        return Err(self.err_context(format!(
-                            "Invalid extra_params key: {}",
-                            key
-                        )));
+            if let Some(extra_params) = &options.extra_params {
+                if !extra_params.is_empty() {
+                    for (key, value) in extra_params {
+                        if !is_valid_param_key(key) {
+                            return Err(self.err_context(format!(
+                                "Invalid extra_params key: {}",
+                                key
+                            )));
+                        }
+                        let stmt = format!("SET {} = ?", key);
+                        conn.exec_drop(stmt, (value.as_str(),))
+                            .await
+                            .map_err(|e| {
+                                self.err_context(format!("Failed to set {}: {}", key, e))
+                            })?;
                     }
-                    let stmt = format!("SET {} = ?", key);
-                    conn.exec_drop(stmt, (value.as_str(),))
-                        .await
-                        .map_err(|e| {
-                            self.err_context(format!("Failed to set {}: {}", key, e))
-                        })?;
                 }
             }
         }
