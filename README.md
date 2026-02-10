@@ -15,7 +15,7 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 - ⚡ **异步优先**：基于 `tokio` 运行时，全程支持 `async/await`，适配高并发场景。
 - 🔧 **灵活配置**：支持多数据源管理、连接池优化、超时设置及事务控制。
 - 🛠️ **过程宏增强**：提供 `#[sql]`、`#[uorm::transaction]` / `#[transaction]` 及 `mapper_assets!` 等宏，极大简化开发工作。
-- 🗄️ **多数据库支持**：原生支持 SQLite 和 MySQL，架构易于扩展至其他 UDBC 驱动。
+- 🗄️ **多数据库支持**：原生支持 MySQL、SQLite 与 PostgreSQL，架构易于扩展至其他 UDBC 驱动。
 - 📝 **详细日志**：集成 `log` crate，提供 SQL 执行、耗时及参数详情，便于调试。
 
 ## 安装
@@ -24,34 +24,39 @@ Rust 下的轻量级 ORM 框架，借鉴 Java MyBatis 的设计理念，强调 S
 
 ```toml
 [dependencies]
-uorm = "0.7.3"
+uorm = "0.9.0"
 ```
 
 ### 特性开关 (Features)
 
-- `sqlite`（默认开启）：支持 SQLite 数据库。
-- `mysql`：支持 MySQL 数据库。
+- `mysql`（默认开启）：支持 MySQL 数据库。
+- `sqlite`：支持 SQLite 数据库。
+- `postgres`：支持 PostgreSQL 数据库。
 
 ```toml
 [dependencies]
-# 仅启用 MySQL 支持
-uorm = { version = "0.7.3", default-features = false, features = ["mysql"] }
+uorm = { version = "0.9.0", default-features = false, features = ["sqlite"] }
+```
+
+```toml
+[dependencies]
+uorm = { version = "0.9.0", default-features = false, features = ["postgres"] }
 ```
 
 ## 快速开始
 
 ### 1) 注册数据库驱动
 
-通过 `U` 全局单例注册驱动。`SqliteDriver` 和 `MysqlDriver` 均采用 Builder 模式。
+通过 `U` 全局单例注册驱动。`MysqlDriver`、`SqliteDriver` 和 `PostgresDriver` 均采用 Builder 模式。
 
 ```rust
 use uorm::driver_manager::U;
-use uorm::udbc::sqlite::pool::SqliteDriver;
+use uorm::udbc::mysql::pool::MysqlDriver;
 
 #[tokio::main]
 async fn main() -> uorm::Result<()> {
     // 创建驱动并指定名称（默认为 "default"）
-    let driver = SqliteDriver::new("sqlite:./app.db")
+    let driver = MysqlDriver::new("mysql://user:pass@localhost/db")
         .build()?;
     
     // 注册到全局管理器

@@ -77,6 +77,13 @@ pub fn derive_param_impl(input: TokenStream) -> TokenStream {
 
             out
         }
+
+        fn normalize_key(s: &str) -> String {
+            s.chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .flat_map(|c| c.to_lowercase())
+                .collect()
+        }
     };
 
     let to_inserts = fields.iter().map(|f| {
@@ -135,8 +142,27 @@ pub fn derive_param_impl(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    if v.is_none() {
+                        let normalized_key = normalize_key(key);
+                        if !normalized_key.is_empty() {
+                            if let Some(original_key) = normalized_map.get(&normalized_key) {
+                                v = map.remove(original_key.as_str());
+                            }
+                        }
+                    }
+
                     let v = v.unwrap_or(uorm::udbc::value::Value::Null);
-                    uorm::udbc::value::FromValue::from_value(v)?
+                    uorm::udbc::value::FromValue::from_value(v).map_err(|e| {
+                        match e {
+                            uorm::error::DbError::TypeMismatch(msg) => {
+                                uorm::error::DbError::TypeMismatch(format!("Field {}: {}", key, msg))
+                            }
+                            uorm::error::DbError::MissingField(msg) => {
+                                uorm::error::DbError::MissingField(format!("Field {}: {}", key, msg))
+                            }
+                            other => other,
+                        }
+                    })?
                 },
             }
         }
@@ -156,6 +182,15 @@ pub fn derive_param_impl(input: TokenStream) -> TokenStream {
             fn from_value(v: uorm::udbc::value::Value) -> std::result::Result<Self, uorm::error::DbError> {
                 if let uorm::udbc::value::Value::Map(mut map) = v {
                     #case_helpers
+                    let mut normalized_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+                    for key in map.keys() {
+                        let normalized_key = normalize_key(key);
+                        if !normalized_key.is_empty() {
+                            normalized_map
+                                .entry(normalized_key)
+                                .or_insert_with(|| key.clone());
+                        }
+                    }
 
                     Ok(Self { #(#from_fields)* })
                 } else {

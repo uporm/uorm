@@ -2,6 +2,8 @@ pub mod connection;
 pub mod driver;
 #[cfg(feature = "mysql")]
 pub mod mysql;
+#[cfg(feature = "postgres")]
+pub mod postgres;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 pub mod value;

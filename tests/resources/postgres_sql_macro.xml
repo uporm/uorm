@@ -1,0 +1,21 @@
+<mapper namespace="pg_user">
+    <sql id="create_table" databaseType="postgres">
+        CREATE TABLE IF NOT EXISTS kb_document_chunk (
+            id BIGSERIAL PRIMARY KEY,
+            state INT NOT NULL
+        );
+    </sql>
+    <delete id="clear_table" databaseType="postgres">
+        DELETE FROM kb_document_chunk;
+    </delete>
+    <insert id="insert_chunk" databaseType="postgres" returnKey="true">
+        INSERT INTO kb_document_chunk(state) VALUES (#{state});
+    </insert>
+    <select id="state_stats" databaseType="postgres">
+        SELECT 
+            COUNT(*) as total, 
+            COALESCE(SUM(CASE WHEN state = 3 THEN 1 ELSE 0 END), 0) as completedCount, 
+            COALESCE(SUM(CASE WHEN state = 4 THEN 1 ELSE 0 END), 0) as failedCount 
+        FROM kb_document_chunk;
+    </select>
+</mapper>
