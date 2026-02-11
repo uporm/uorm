@@ -1,6 +1,6 @@
 [package]
 name = "uorm"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 description = "Rust 下的轻量级 ORM 框架，借鉴了 Java MyBatis 的设计理念，强调 SQL 与业务逻辑分离。它结合 Rust 的类型系统与宏机制，支持编写原生 SQL 并自动映射结果，兼容 async/await，兼顾性能与可控性。"
 license = "Apache-2.0"
@@ -18,8 +18,9 @@ serde = { version = "1.0.228", features = ["derive"] }
 quick-xml = { version = "0.39.0", features = ["serialize"] }
 dashmap = "7.0.0-rc2"
 chrono = { version = "0.4.42", features = ["serde"] }
-rust_decimal = { version = "1.39.0", features = ["serde"] }
+rust_decimal = { version = "1.39.0", features = ["serde", "db-postgres"] }
 async-trait = "0.1.89"
+bytes = "1.10.0"
 mysql_async = { version = "0.36.1", features = ["chrono", "rust_decimal"], optional = true }
 rusqlite = { version = "0.38.0", optional = true }
 tokio-postgres = { version = "0.7.16", features = ["with-chrono-0_4"], optional = true }

@@ -2,14 +2,75 @@
     <sql id="create_table" databaseType="postgres">
         CREATE TABLE IF NOT EXISTS kb_document_chunk (
             id BIGSERIAL PRIMARY KEY,
-            state INT NOT NULL
+            state INT NOT NULL,
+            tiny_i8 SMALLINT NOT NULL,
+            small_i16 SMALLINT NOT NULL,
+            big_i64 BIGINT NOT NULL,
+            u8_val INT NOT NULL,
+            u16_val INT NOT NULL,
+            u32_val BIGINT NOT NULL,
+            u64_val BIGINT NOT NULL,
+            f32_val REAL NOT NULL,
+            f64_val DOUBLE PRECISION NOT NULL,
+            flag BOOLEAN NOT NULL,
+            letter CHAR(1) NOT NULL,
+            name TEXT NOT NULL,
+            varchar_val VARCHAR(64) NOT NULL,
+            enabled BOOLEAN NOT NULL,
+            score DOUBLE PRECISION NOT NULL,
+            dec_val NUMERIC(18,6) NOT NULL,
+            payload BYTEA NOT NULL,
+            event_date DATE NOT NULL,
+            event_time TIME NOT NULL,
+            event_ts TIMESTAMP NOT NULL
         );
     </sql>
     <delete id="clear_table" databaseType="postgres">
         DELETE FROM kb_document_chunk;
     </delete>
     <insert id="insert_chunk" databaseType="postgres" returnKey="true">
-        INSERT INTO kb_document_chunk(state) VALUES (#{state});
+        INSERT INTO kb_document_chunk(
+            state, tiny_i8, small_i16, big_i64, u8_val, u16_val, u32_val, u64_val,
+            f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
+            payload, event_date, event_time, event_ts
+        ) VALUES (
+            #{state}, #{tiny_i8}, #{small_i16}, #{big_i64}, #{u8_val}, #{u16_val}, #{u32_val}, #{u64_val},
+            #{f32_val}, #{f64_val}, #{flag}, #{letter}, #{name}, #{varchar_val}, #{enabled}, #{score}, #{dec_val}::numeric,
+            decode(#{payload}, 'hex'), #{event_date}::date, #{event_time}::time, #{event_ts}::timestamp
+        );
+    </insert>
+    <insert id="insert_chunk_batch" databaseType="postgres">
+        INSERT INTO kb_document_chunk(
+            state, tiny_i8, small_i16, big_i64, u8_val, u16_val, u32_val, u64_val,
+            f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
+            payload, event_date, event_time, event_ts
+        )
+        VALUES
+        <foreach item="item" collection="items" separator=",">
+            (
+                #{item.state},
+                #{item.tiny_i8},
+                #{item.small_i16},
+                #{item.big_i64},
+                #{item.u8_val},
+                #{item.u16_val},
+                #{item.u32_val},
+                #{item.u64_val},
+                #{item.f32_val},
+                #{item.f64_val},
+                #{item.flag},
+                #{item.letter},
+                #{item.name},
+                #{item.varchar_val},
+                #{item.enabled},
+                #{item.score},
+                #{item.dec_val}::numeric,
+                decode(#{item.payload}, 'hex'),
+                #{item.event_date}::date,
+                #{item.event_time}::time,
+                #{item.event_ts}::timestamp
+            )
+        </foreach>
     </insert>
     <select id="state_stats" databaseType="postgres">
         SELECT 

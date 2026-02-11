@@ -42,7 +42,7 @@ impl Connection for PostgresConnection {
             .client_mut()?
             .query(sql, &param_refs)
             .await
-            .map_err(|e| DbError::DbError(e.to_string()))?;
+            .map_err(|e| DbError::DbError(format!("{:?}", e)))?;
 
         Ok(rows.iter().map(from_pg_row).collect())
     }
@@ -57,7 +57,7 @@ impl Connection for PostgresConnection {
             .client_mut()?
             .execute(sql, &param_refs)
             .await
-            .map_err(|e| DbError::DbError(e.to_string()))?;
+            .map_err(|e| DbError::DbError(format!("{:?}", e)))?;
         Ok(affected)
     }
 
@@ -66,7 +66,7 @@ impl Connection for PostgresConnection {
             .client_mut()?
             .query_opt("SELECT LASTVAL()", &[])
             .await
-            .map_err(|e| DbError::DbError(e.to_string()))?;
+            .map_err(|e| DbError::DbError(format!("{:?}", e)))?;
         if let Some(row) = row {
             let id: i64 = row.try_get(0).unwrap_or(0);
             Ok(id.max(0) as u64)
@@ -79,7 +79,7 @@ impl Connection for PostgresConnection {
         self.client_mut()?
             .batch_execute("BEGIN")
             .await
-            .map_err(|e| DbError::DbError(e.to_string()))?;
+            .map_err(|e| DbError::DbError(format!("{:?}", e)))?;
         Ok(())
     }
 
@@ -87,7 +87,7 @@ impl Connection for PostgresConnection {
         self.client_mut()?
             .batch_execute("COMMIT")
             .await
-            .map_err(|e| DbError::DbError(e.to_string()))?;
+            .map_err(|e| DbError::DbError(format!("{:?}", e)))?;
         Ok(())
     }
 
@@ -95,7 +95,7 @@ impl Connection for PostgresConnection {
         self.client_mut()?
             .batch_execute("ROLLBACK")
             .await
-            .map_err(|e| DbError::DbError(e.to_string()))?;
+            .map_err(|e| DbError::DbError(format!("{:?}", e)))?;
         Ok(())
     }
 }
