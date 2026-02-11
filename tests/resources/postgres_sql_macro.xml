@@ -23,7 +23,9 @@
             payload BYTEA NOT NULL,
             event_date DATE NOT NULL,
             event_time TIME NOT NULL,
-            event_ts TIMESTAMP NOT NULL
+            event_ts TIMESTAMP NOT NULL,
+            json_val JSON NOT NULL,
+            jsonb_val JSONB NOT NULL
         );
     </sql>
     <delete id="clear_table" databaseType="postgres">
@@ -33,18 +35,18 @@
         INSERT INTO kb_document_chunk(
             state, tiny_i8, small_i16, big_i64, u8_val, u16_val, u32_val, u64_val,
             nullable_int, f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
-            payload, event_date, event_time, event_ts
+            payload, event_date, event_time, event_ts, json_val, jsonb_val
         ) VALUES (
             #{state}, #{tiny_i8}, #{small_i16}, #{big_i64}, #{u8_val}, #{u16_val}, #{u32_val}, #{u64_val},
             #{nullable_int}, #{f32_val}, #{f64_val}, #{flag}, #{letter}, #{name}, #{varchar_val}, #{enabled}, #{score}, #{dec_val}::numeric,
-            decode(#{payload}, 'hex'), #{event_date}::date, #{event_time}::time, #{event_ts}::timestamp
+            decode(#{payload}, 'hex'), #{event_date}::date, #{event_time}::time, #{event_ts}::timestamp, #{json_val}::json, #{jsonb_val}::jsonb
         );
     </insert>
     <insert id="insert_chunk_batch" databaseType="postgres">
         INSERT INTO kb_document_chunk(
             state, tiny_i8, small_i16, big_i64, u8_val, u16_val, u32_val, u64_val,
             nullable_int, f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
-            payload, event_date, event_time, event_ts
+            payload, event_date, event_time, event_ts, json_val, jsonb_val
         )
         VALUES
         <foreach item="item" collection="items" separator=",">
@@ -70,7 +72,9 @@
                 decode(#{item.payload}, 'hex'),
                 #{item.event_date}::date,
                 #{item.event_time}::time,
-                #{item.event_ts}::timestamp
+                #{item.event_ts}::timestamp,
+                #{item.json_val}::json,
+                #{item.jsonb_val}::jsonb
             )
         </foreach>
     </insert>

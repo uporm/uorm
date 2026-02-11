@@ -42,6 +42,9 @@ struct ChunkInsert {
     event_date: String,
     event_time: String,
     event_ts: String,
+    json_val: String,
+    jsonb_val: String,
+    embedding: String,
 }
 
 #[derive(Param)]
@@ -102,6 +105,14 @@ fn build_chunk(seed: i32) -> ChunkInsert {
         .iter()
         .map(|b| format!("{:02x}", b))
         .collect::<String>();
+    let json_val = format!(r#"{{"key": "json_{}", "value": {}}}"#, seed, seed);
+    let jsonb_val = format!(r#"{{"key": "jsonb_{}", "value": {}}}"#, seed, seed);
+    let embedding = format!(
+        "[{:.3},{:.3},{:.3}]",
+        seed as f64 + 0.1,
+        seed as f64 + 0.2,
+        seed as f64 + 0.3
+    );
     ChunkInsert {
         state: seed,
         tiny_i8: (seed % 120) as i8,
@@ -125,6 +136,9 @@ fn build_chunk(seed: i32) -> ChunkInsert {
         event_date: date.to_string(),
         event_time: time.to_string(),
         event_ts: NaiveDateTime::new(date, time).to_string(),
+        json_val,
+        jsonb_val,
+        embedding,
     }
 }
 

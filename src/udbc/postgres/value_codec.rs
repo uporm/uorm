@@ -3,6 +3,7 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::error::Error;
+use serde_json::Value as JsonValue;
 use tokio_postgres::Row;
 use tokio_postgres::types::{to_sql_checked, IsNull, ToSql, Type};
 
@@ -68,6 +69,10 @@ impl ToSql for PgText {
         ty: &Type,
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        if is_vector_type(ty) {
+            out.extend_from_slice(self.0.as_bytes());
+            return Ok(IsNull::No);
+        }
         match *ty {
             Type::NUMERIC => {
                 let v: Decimal = self.0.parse()?;
@@ -89,6 +94,10 @@ impl ToSql for PgText {
                 let v = DateTime::parse_from_rfc3339(&self.0)?.with_timezone(&Utc);
                 v.to_sql(ty, out)
             }
+            Type::JSON | Type::JSONB => {
+                let v: JsonValue = serde_json::from_str(&self.0)?;
+                v.to_sql(ty, out)
+            }
             Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME => self.0.to_sql(ty, out),
             _ => Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -98,21 +107,28 @@ impl ToSql for PgText {
     }
 
     fn accepts(ty: &Type) -> bool {
-        matches!(
-            *ty,
-            Type::NUMERIC
-                | Type::DATE
-                | Type::TIME
-                | Type::TIMESTAMP
-                | Type::TIMESTAMPTZ
-                | Type::TEXT
-                | Type::VARCHAR
-                | Type::BPCHAR
-                | Type::NAME
-        )
+        is_vector_type(ty)
+            || matches!(
+                *ty,
+                Type::NUMERIC
+                    | Type::DATE
+                    | Type::TIME
+                    | Type::TIMESTAMP
+                    | Type::TIMESTAMPTZ
+                    | Type::TEXT
+                    | Type::VARCHAR
+                    | Type::BPCHAR
+                    | Type::NAME
+                    | Type::JSON
+                    | Type::JSONB
+            )
     }
 
     to_sql_checked!();
+}
+
+fn is_vector_type(ty: &Type) -> bool {
+    ty.name().eq_ignore_ascii_case("vector")
 }
 
 #[derive(Debug)]
@@ -192,6 +208,11 @@ pub fn from_pg_row(row: &Row) -> HashMap<String, Value> {
             Type::FLOAT4 => option_value(row.try_get::<_, Option<f32>>(idx), Value::F32),
             Type::FLOAT8 => option_value(row.try_get::<_, Option<f64>>(idx), Value::F64),
             Type::NUMERIC => option_value(row.try_get::<_, Option<String>>(idx), Value::Str),
+            Type::JSON | Type::JSONB => {
+                option_value(row.try_get::<_, Option<JsonValue>>(idx), |v| {
+                    Value::Str(v.to_string())
+                })
+            }
             Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME => {
                 option_value(row.try_get::<_, Option<String>>(idx), Value::Str)
             }
