@@ -28,6 +28,7 @@ struct ChunkInsert {
     u16_val: u16,
     u32_val: u32,
     u64_val: u64,
+    nullable_int: Option<i32>,
     f32_val: f32,
     f64_val: f64,
     flag: bool,
@@ -73,6 +74,16 @@ impl PgDao {
     async fn state_stats() -> Result<Stats> {
         exec!()
     }
+
+    #[sql("select_nullable_varchar")]
+    async fn select_nullable_varchar(val: Option<i32>) -> Result<Option<String>> {
+        exec!()
+    }
+
+    #[sql("count_nullable_int_null")]
+    async fn count_nullable_int_null() -> Result<i64> {
+        exec!()
+    }
 }
 
 #[transaction]
@@ -100,6 +111,7 @@ fn build_chunk(seed: i32) -> ChunkInsert {
         u16_val: (seed as u16).wrapping_add(100),
         u32_val: seed as u32 * 1000,
         u64_val: seed as u64 * 10000,
+        nullable_int: if seed % 2 == 0 { Some(seed) } else { None },
         f32_val: seed as f32 + 0.25,
         f64_val: seed as f64 + 0.75,
         flag: seed % 2 == 0,
@@ -139,10 +151,16 @@ async fn test_postgres_sql_macro() -> Result<()> {
     PgDao::insert_chunk(build_chunk(4)).await?;
     PgDao::insert_chunk(build_chunk(1)).await?;
     let stats = PgDao::state_stats().await?;
+    let none_varchar = PgDao::select_nullable_varchar(None).await?;
+    let some_varchar = PgDao::select_nullable_varchar(Some(123)).await?;
+    let null_count = PgDao::count_nullable_int_null().await?;
 
     assert_eq!(stats.total, 4);
     assert_eq!(stats.completed_count, 2);
     assert_eq!(stats.failed_count, 1);
+    assert_eq!(none_varchar, None);
+    assert_eq!(some_varchar, Some("123".to_string()));
+    assert!(null_count >= 1);
     Ok(())
 }
 

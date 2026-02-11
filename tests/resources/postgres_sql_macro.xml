@@ -10,6 +10,7 @@
             u16_val INT NOT NULL,
             u32_val BIGINT NOT NULL,
             u64_val BIGINT NOT NULL,
+            nullable_int INT NULL,
             f32_val REAL NOT NULL,
             f64_val DOUBLE PRECISION NOT NULL,
             flag BOOLEAN NOT NULL,
@@ -31,18 +32,18 @@
     <insert id="insert_chunk" databaseType="postgres" returnKey="true">
         INSERT INTO kb_document_chunk(
             state, tiny_i8, small_i16, big_i64, u8_val, u16_val, u32_val, u64_val,
-            f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
+            nullable_int, f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
             payload, event_date, event_time, event_ts
         ) VALUES (
             #{state}, #{tiny_i8}, #{small_i16}, #{big_i64}, #{u8_val}, #{u16_val}, #{u32_val}, #{u64_val},
-            #{f32_val}, #{f64_val}, #{flag}, #{letter}, #{name}, #{varchar_val}, #{enabled}, #{score}, #{dec_val}::numeric,
+            #{nullable_int}, #{f32_val}, #{f64_val}, #{flag}, #{letter}, #{name}, #{varchar_val}, #{enabled}, #{score}, #{dec_val}::numeric,
             decode(#{payload}, 'hex'), #{event_date}::date, #{event_time}::time, #{event_ts}::timestamp
         );
     </insert>
     <insert id="insert_chunk_batch" databaseType="postgres">
         INSERT INTO kb_document_chunk(
             state, tiny_i8, small_i16, big_i64, u8_val, u16_val, u32_val, u64_val,
-            f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
+            nullable_int, f32_val, f64_val, flag, letter, name, varchar_val, enabled, score, dec_val,
             payload, event_date, event_time, event_ts
         )
         VALUES
@@ -56,6 +57,7 @@
                 #{item.u16_val},
                 #{item.u32_val},
                 #{item.u64_val},
+                #{item.nullable_int},
                 #{item.f32_val},
                 #{item.f64_val},
                 #{item.flag},
@@ -78,5 +80,11 @@
             COALESCE(SUM(CASE WHEN state = 3 THEN 1 ELSE 0 END), 0) as completedCount, 
             COALESCE(SUM(CASE WHEN state = 4 THEN 1 ELSE 0 END), 0) as failedCount 
         FROM kb_document_chunk;
+    </select>
+    <select id="select_nullable_varchar" databaseType="postgres">
+        SELECT #{val}::varchar as value;
+    </select>
+    <select id="count_nullable_int_null" databaseType="postgres">
+        SELECT COUNT(*) FROM kb_document_chunk WHERE nullable_int IS NULL;
     </select>
 </mapper>

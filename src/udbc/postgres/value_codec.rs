@@ -33,6 +33,9 @@ impl ToSql for PgInt {
                 v.to_sql(ty, out)
             }
             Type::INT8 => self.0.to_sql(ty, out),
+            Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME => {
+                self.0.to_string().to_sql(ty, out)
+            }
             _ => Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Unsupported type: {:?}", ty),
@@ -41,7 +44,10 @@ impl ToSql for PgInt {
     }
 
     fn accepts(ty: &Type) -> bool {
-        matches!(*ty, Type::INT2 | Type::INT4 | Type::INT8)
+        matches!(
+            *ty,
+            Type::INT2 | Type::INT4 | Type::INT8 | Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME
+        )
     }
 
     to_sql_checked!();
@@ -72,11 +78,11 @@ impl ToSql for PgText {
                 v.to_sql(ty, out)
             }
             Type::TIME => {
-                let v = NaiveTime::parse_from_str(&self.0, "%H:%M:%S")?;
+                let v = NaiveTime::parse_from_str(&self.0, "%H:%M:%S%.f")?;
                 v.to_sql(ty, out)
             }
             Type::TIMESTAMP => {
-                let v = NaiveDateTime::parse_from_str(&self.0, "%Y-%m-%d %H:%M:%S")?;
+                let v = NaiveDateTime::parse_from_str(&self.0, "%Y-%m-%d %H:%M:%S%.f")?;
                 v.to_sql(ty, out)
             }
             Type::TIMESTAMPTZ => {
@@ -109,9 +115,28 @@ impl ToSql for PgText {
     to_sql_checked!();
 }
 
+#[derive(Debug)]
+struct PgNull;
+
+impl ToSql for PgNull {
+    fn to_sql(
+        &self,
+        _ty: &Type,
+        _out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        Ok(IsNull::Yes)
+    }
+
+    fn accepts(_ty: &Type) -> bool {
+        true
+    }
+
+    to_sql_checked!();
+}
+
 pub fn to_pg_param(value: &Value) -> Box<dyn ToSql + Sync + Send> {
     match value {
-        Value::Null => Box::new(None::<i32>),
+        Value::Null => Box::new(PgNull),
         Value::Bool(v) => Box::new(*v),
         Value::Char(c) => Box::new(c.to_string()),
         Value::Str(s) => Box::new(PgText::new(s.clone())),
@@ -123,7 +148,7 @@ pub fn to_pg_param(value: &Value) -> Box<dyn ToSql + Sync + Send> {
             if *v >= i64::MIN as i128 && *v <= i64::MAX as i128 {
                 Box::new(PgInt::new(*v as i64))
             } else {
-                Box::new(v.to_string())
+                Box::new(PgText::new(v.to_string()))
             }
         }
         Value::U8(v) => Box::new(PgInt::new(*v as i64)),
@@ -133,14 +158,14 @@ pub fn to_pg_param(value: &Value) -> Box<dyn ToSql + Sync + Send> {
             if *v <= i64::MAX as u64 {
                 Box::new(PgInt::new(*v as i64))
             } else {
-                Box::new(v.to_string())
+                Box::new(PgText::new(v.to_string()))
             }
         }
         Value::U128(v) => {
             if *v <= i64::MAX as u128 {
                 Box::new(PgInt::new(*v as i64))
             } else {
-                Box::new(v.to_string())
+                Box::new(PgText::new(v.to_string()))
             }
         }
         Value::F32(v) => Box::new(*v),
