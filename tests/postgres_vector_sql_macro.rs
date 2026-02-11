@@ -3,7 +3,7 @@ use uorm::Result;
 use uorm::driver_manager::U;
 use uorm::sql;
 #[cfg(feature = "postgres")]
-use pgvector::Vector;
+use uorm::Vector;
 #[cfg(feature = "postgres")]
 use uorm::udbc::postgres::pool::PostgresDriver;
 

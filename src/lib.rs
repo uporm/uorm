@@ -12,6 +12,8 @@ use crate::error::DbError;
 pub use ctor;
 pub use executor::session::TransactionResult;
 pub use udbc::value::{FromValue, ToValue, Value};
+#[cfg(feature = "postgres")]
+pub use pgvector::Vector;
 pub use uorm_macros::Param;
 pub use uorm_macros::mapper_assets;
 pub use uorm_macros::param;

@@ -103,7 +103,7 @@ impl Mapper {
                         let list_value = Value::List(vec![Value::Map(row.clone())]);
                         match R::from_value(list_value) {
                             Ok(v) => Ok(v),
-                            Err(list_err) => {
+                            Err(_) => {
                                 let map_value = Value::Map(row.clone());
                                 match R::from_value(map_value) {
                                     Ok(v) => return Ok(v),
