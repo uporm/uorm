@@ -38,6 +38,8 @@ pub fn to_sqlite_value(v: &Value) -> SqliteValue {
         Value::DateTime(dt) => SqliteValue::Text(dt.to_string()),
         Value::DateTimeUtc(dt) => SqliteValue::Text(dt.to_rfc3339()),
         Value::Decimal(d) => SqliteValue::Text(d.to_string()),
+        #[cfg(feature = "postgres")]
+        Value::Vector(_) => SqliteValue::Null,
         Value::List(_) | Value::Map(_) => SqliteValue::Null,
     }
 }

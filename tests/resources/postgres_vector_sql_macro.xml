@@ -1,0 +1,21 @@
+<mapper namespace="pg_user">
+    <sql id="create_vector_table" databaseType="postgres">
+        CREATE TABLE IF NOT EXISTS kb_document_vector (
+            doc_id BIGINT PRIMARY KEY,
+            embedding vector(1024) NOT NULL
+        );
+    </sql>
+    <delete id="clear_vector_table" databaseType="postgres">
+        DELETE FROM kb_document_vector;
+    </delete>
+    <insert id="insert_vector" databaseType="postgres">
+        INSERT INTO kb_document_vector(doc_id, embedding)
+        VALUES (#{doc_id}, #{embedding});
+    </insert>
+    <select id="select_vector_nearest" databaseType="postgres">
+        SELECT doc_id
+        FROM kb_document_vector
+        ORDER BY embedding &lt;-&gt; #{embedding}
+        LIMIT 1;
+    </select>
+</mapper>

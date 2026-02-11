@@ -2,6 +2,8 @@ use crate::error::DbError;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
+#[cfg(feature = "postgres")]
+use pgvector::Vector;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -42,6 +44,8 @@ pub enum Value {
 
     /// 键值映射（如结构体、JSON 对象）
     Map(HashMap<String, Value>),
+    #[cfg(feature = "postgres")]
+    Vector(Vector),
 }
 
 /// 任何能转换为 Value 的类型
@@ -227,6 +231,23 @@ impl FromValue for String {
 impl ToValue for &str {
     fn to_value(&self) -> Value {
         Value::Str(self.to_string())
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl ToValue for Vector {
+    fn to_value(&self) -> Value {
+        Value::Vector(self.clone())
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl FromValue for Vector {
+    fn from_value(v: Value) -> Result<Self, DbError> {
+        match v {
+            Value::Vector(vec) => Ok(vec),
+            _ => Err(DbError::TypeMismatch(format!("Expected Vector, got {:?}", v))),
+        }
     }
 }
 

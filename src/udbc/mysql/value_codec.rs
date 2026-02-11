@@ -68,6 +68,8 @@ pub fn to_mysql_value(v: &Value) -> MyValue {
             to_mysql_date_value(ndt.date(), ndt.time())
         }
         Value::Decimal(d) => MyValue::Bytes(d.to_string().into_bytes()),
+        #[cfg(feature = "postgres")]
+        Value::Vector(_) => MyValue::Bytes(Vec::new()),
         Value::List(_) | Value::Map(_) => MyValue::Bytes(Vec::new()),
     }
 }
